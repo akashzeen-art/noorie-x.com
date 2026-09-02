@@ -123,14 +123,6 @@ function ArticleOverlay({ item, onClose, tr }) {
               <button type="button" className="rss-read-more" onClick={() => setShowIframe(false)}>
                 ← Back to summary
               </button>
-              <a
-                className="rss-read-more"
-                href={item.link}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open in new tab
-              </a>
               <span className="rss-iframe-title">{item.title}</span>
             </div>
             <iframe
