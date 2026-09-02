@@ -1,0 +1,131 @@
+/** Localized display titles keyed by English catalog title */
+const TITLES = {
+  'ADVENTURE BEYOND BORDERS': { hi: 'सीमाओं से परे रोमांच', ur: 'سرحدوں سے پرے مہم جوئی' },
+  'ADVENTURE KE RAAZ': { hi: 'एडवेंचर के राज़', ur: 'ایڈونچر کے راز' },
+  'BLACK DIARY SECRETS EP2': { hi: 'ब्लैक डायरी सीक्रेट्स एप 2', ur: 'بلیک ڈائری سیکریٹس اقساط 2' },
+  'BLACK HORIZON': { hi: 'ब्लैक होराइज़न', ur: 'بلیک ہورائزن' },
+  'BLACK SIGNAL': { hi: 'ब्लैक सिग्नल', ur: 'بلیک سگنل' },
+  'BLACKMAIL JUNCTION': { hi: 'ब्लैकमेल जंक्शन', ur: 'بلیک میل جنکشن' },
+  'CHASE TO DANGER EP1': { hi: 'खतरे की ओर पीछा एप 1', ur: 'خطر کی طرف پیچھا اقساط 1' },
+  'CHASE TO DANGER EP2': { hi: 'खतरे की ओर पीछा एप 2', ur: 'خطر کی طرف پیچھا اقساط 2' },
+  'CHASE TO DANGER EP3': { hi: 'खतरे की ओर पीछा एप 3', ur: 'خطر کی طرف پیچھا اقساط 3' },
+  'CHASE TO DANGER EP4': { hi: 'खतरे की ओर पीछा एप 4', ur: 'خطر کی طرف پیچھا اقساط 4' },
+  'CODE RED MAFIA': { hi: 'कोड रेड माफिया', ur: 'کوڈ ریڈ مافیا' },
+  'CRIME SYNDICATE': { hi: 'क्राइम सिंडिकेट', ur: 'کرائم سنڈیکیٹ' },
+  'DANGEROUS ALLIANCE': { hi: 'खतरनाक गठबंधन', ur: 'خطرناک اتحاد' },
+  'DANGEROUS DESTINATION EP1': { hi: 'खतरनाक मंज़िल एप 1', ur: 'خطرناک منزل اقساط 1' },
+  'DANGEROUS DESTINATION EP2': { hi: 'खतरनाक मंज़िल एप 2', ur: 'خطرناک منزل اقساط 2' },
+  'DANGEROUS DESTINATION EP3': { hi: 'खतरनाक मंज़िल एप 3', ur: 'خطرناک منزل اقساط 3' },
+  'DANGEROUS DESTINATION EP4': { hi: 'खतरनाक मंज़िल एप 4', ur: 'خطرناک منزل اقساط 4' },
+  'DANGEROUS MINDS EP1': { hi: 'खतरनाक दिमाग एप 1', ur: 'خطرناک ذہن اقساط 1' },
+  'DANGEROUS MINDS EP2': { hi: 'खतरनाक दिमाग एप 2', ur: 'خطرناک ذہن اقساط 2' },
+  'DANGEROUS MINDS EP3': { hi: 'खतरनाक दिमाग एप 3', ur: 'خطرناک ذہن اقساط 3' },
+  'DANGEROUS MINDS EP4': { hi: 'खतरनाक दिमाग एप 4', ur: 'خطرناک ذہن اقساط 4' },
+  'DANGEROUS TERRITORY': { hi: 'खतरनाक इलाका', ur: 'خطرناک علاقہ' },
+  'DARK CITY FILES': { hi: 'डार्क सिटी फ़ाइल्स', ur: 'ڈارک سٹی فائلز' },
+  'DARK EMPIRE': { hi: 'डार्क एम्पायर', ur: 'ڈارک ایمپائر' },
+  'DEAD END MISSON': { hi: 'डेड एंड मिशन', ur: 'ڈیڈ اینڈ مشن' },
+  'ESCAPE BEYOND FEAR EP2': { hi: 'डर से परे भागना एप 2', ur: 'خوف سے آگے فرار اقساط 2' },
+  'ESCAPE FROM NOWHERE': { hi: 'कहीं से भागना', ur: 'کہیں سے فرار' },
+  'ESCAPE PLAN 302': { hi: 'एस्केप प्लान 302', ur: 'ایسکیپ پلان 302' },
+  'ESCAPE ROUT 21': { hi: 'एस्केप रूट 21', ur: 'ایسکیپ روٹ 21' },
+  'FATAL CONNECTIONS EP1': { hi: 'फ़ेटल कनेक्शन्स एप 1', ur: 'فیٹل کنکشنز اقساط 1' },
+  'FATAL CONNECTIONS EP2': { hi: 'फ़ेटल कनेक्शन्स एप 2', ur: 'فیٹل کنکشنز اقساط 2' },
+  'FATAL CONNECTIONS EP3': { hi: 'फ़ेटल कनेक्शन्स एप 3', ur: 'فیٹل کنکشنز اقساط 3' },
+  'FINAL COUNTDOWN': { hi: 'फाइनल काउंटडाउन', ur: 'فائنل کاؤنٹ ڈاؤن' },
+  'FINAL WITNESS': { hi: 'आखिरी गवाह', ur: 'آخری گواہ' },
+  'HER STORY': { hi: 'उसकी कहानी', ur: 'اس کی کہانی' },
+  'HIDDEN FEAR EP1': { hi: 'छिपा हुआ डर एप 1', ur: 'پوشیدہ خوف اقساط 1' },
+  'HIDDEN FEAR EP2': { hi: 'छिपा हुआ डर एप 2', ur: 'پوشیدہ خوف اقساط 2' },
+  'HIDDEN FEAR EP3': { hi: 'छिपा हुआ डर एप 3', ur: 'پوشیدہ خوف اقساط 3' },
+  'HIDDEN FEAR EP4': { hi: 'छिपा हुआ डर एप 4', ur: 'پوشیدہ خوف اقساط 4' },
+  'KILL-HER-GOATS': { hi: 'किल-हर-गोअट्स', ur: 'کل-ہر-گوٹس' },
+  'KILLER INSTINCT': { hi: 'किलर इंस्टिंक्ट', ur: 'کلر انسٹنکٹ' },
+  'KILLER WALI RAAT': { hi: 'किलर वाली रात', ur: 'کلر والی رات' },
+  'LAST MISSION ALIVE': { hi: 'आखिरी मिशन अलाइव', ur: 'آخری مشن الائیو' },
+  'MIDNIGHT CASE': { hi: 'मिडनाइट केस', ur: 'مڈ نائٹ کیس' },
+  'MIDNIGHT ESCAPE': { hi: 'मिडनाइट एस्केप', ur: 'مڈ نائٹ فرار' },
+  'MISSSION DARKNIGHT': { hi: 'मिशन डार्कनाइट', ur: 'مشن ڈارک نائٹ' },
+  'MUCK ENGLISH WITH SU': { hi: 'मक इंग्लिश विद सू', ur: 'مک انگلش ود سو' },
+  'MYSTERY JUNCTION': { hi: 'मिस्ट्री जंक्शन', ur: 'مسٹری جنکشن' },
+  'OPERATION NIGHTFALL': { hi: 'ऑपरेशन नाइटफॉल', ur: 'آپریشن نائٹ فال' },
+  'ROGUE NATION': { hi: 'रोग नेशन', ur: 'روگ نیشن' },
+  'Raaz Beyond Fear': { hi: 'राज़ बियॉन्ड फियर', ur: 'راز بئیونڈ فیئر' },
+  'Raaz, Revenge & Mafia Ep1': { hi: 'राज़, रिवेंज और माफिया एप 1', ur: 'راز، ریوینج اور مافیا اقساط 1' },
+  'Raaz, Revenge & Mafia Ep2': { hi: 'राज़, रिवेंज और माफिया एप 2', ur: 'راز، ریوینج اور مافیا اقساط 2' },
+  'SECRET NIGHTS': { hi: 'सीक्रेट नाइट्स', ur: 'سیکریٹ نائٹس' },
+  'SHADOW FORCE': { hi: 'शैडो फोर्स', ur: 'شیڈو فورس' },
+  'SHADOW PROTOCOL': { hi: 'शैडो प्रोटोकॉल', ur: 'شیڈو پروٹوکول' },
+  'SILENT WITNESS': { hi: 'साइलेंट विटनेस', ur: 'سائلنٹ وٹنس' },
+  'Silent Chase': { hi: 'खामोश पीछा', ur: 'خاموش پیچھا' },
+  'Silent Trigger': { hi: 'साइलेंट ट्रिगर', ur: 'سائلنٹ ٹرگر' },
+  'THE CRIME CIRCLE': { hi: 'द क्राइम सर्कल', ur: 'دی کرائم سرکل' },
+  'THE DARK NETWORK': { hi: 'द डार्क नेटवर्क', ur: 'دی ڈارک نیٹ ورک' },
+  'THE DIARY SECRETS': { hi: 'डायरी के राज़', ur: 'ڈائری کے راز' },
+  'THE FINAL DHOKHA': { hi: 'द फाइनल धोखा', ur: 'دی فائنل دھوکہ' },
+  'THE FINAL SECRET': { hi: 'आखिरी राज़', ur: 'آخری راز' },
+  'THE FITNESS TRAP': { hi: 'फ़िटनेस ट्रैप', ur: 'فٹنس ٹرپ' },
+  'THE HIDDEN ENEMY': { hi: 'छिपा दुश्मन', ur: 'پوشیدہ دشمن' },
+  'THE LAST CHANCE': { hi: 'आखिरी मौका', ur: 'آخری موقع' },
+  'THE LAST TRUTH EP1': { hi: 'आखिरी सच एप 1', ur: 'آخری سچ اقساط 1' },
+  'THE LAST TRUTH EP2': { hi: 'आखिरी सच एप 2', ur: 'آخری سچ اقساط 2' },
+  'THE MISSING LINK': { hi: 'लापता कड़ी', ur: 'گمشدہ کڑی' },
+  'THE SECRET MISSION': { hi: 'सीक्रेट मिशन', ur: 'سیکریٹ مشن' },
+  'THE SECRET ORDER': { hi: 'सीक्रेट ऑर्डर', ur: 'سیکریٹ آرڈر' },
+  'THE SECRET SYNDICATE': { hi: 'सीक्रेट सिंडिकेट', ur: 'سیکریٹ سنڈیکیٹ' },
+  'THE SHADOW GAME EP1': { hi: 'द शैडो गेम एप 1', ur: 'دی شیڈو گیم اقساط 1' },
+  'THE SHADOW GAME EP2': { hi: 'द शैडो गेम एप 2', ur: 'دی شیڈو گیم اقساط 2' },
+  'THE SHADOW GAME EP3': { hi: 'द शैडो गेम एप 3', ur: 'دی شیڈو گیم اقساط 3' },
+  'THE SHADOW GAME EP4': { hi: 'द शैडो गेम एप 4', ur: 'دی شیڈو گیم اقساط 4' },
+  'THE SILENT HUNT': { hi: 'खामोश शिकार', ur: 'خاموش شکار' },
+  'THE UNKNOWN TARGET': { hi: 'अनजान निशाना', ur: 'نامعلوم نشانہ' },
+  'THE UNOFFICIAL NETWORK': { hi: 'अनऑफिशियल नेटवर्क', ur: 'غیر سرکاری نیٹ ورک' },
+  'The Forbidden Files': { hi: 'मना किए गए फ़ाइलें', ur: 'ممنوعہ فائلز' },
+  'The Hidden Truth': { hi: 'छिपा सच', ur: 'پوشیدہ سچ' },
+  'The Missing Witness': { hi: 'लापता गवाह', ur: 'گمشدہ گواہ' },
+  'The Secret Route Ep 1': { hi: 'सीक्रेट रूट एप 1', ur: 'سیکریٹ روٹ اقساط 1' },
+  'The Secret Route Ep 2': { hi: 'सीक्रेट रूट एप 2', ur: 'سیکریٹ روٹ اقساط 2' },
+  'UNDERGROUND WARRIORS EP1': { hi: 'अंडरग्राउंड वॉरियर्स एप 1', ur: 'انڈر گراؤنڈ واریرز اقساط 1' },
+  'UNDERGROUND WARRIORS EP2': { hi: 'अंडरग्राउंड वॉरियर्स एप 2', ur: 'انڈر گراؤنڈ واریرز اقساط 2' },
+  'UNKNOWN ENEMY EP1': { hi: 'अनजान दुश्मन एप 1', ur: 'نامعلوم دشمن اقساط 1' },
+  'UNKNOWN ENEMY EP2': { hi: 'अनजान दुश्मन एप 2', ur: 'نامعلوم دشمن اقساط 2' },
+  'UNKNOWN ENEMY EP3': { hi: 'अनजान दुश्मन एप 3', ur: 'نامعلوم دشمن اقساط 3' },
+  'WANTED BY DARKNESS': { hi: 'अँधेरे द्वारा वांटेड', ur: 'اندھیرے کی طرف سے وانٹڈ' },
+  'WANTED FOR REVENGE': { hi: 'बदले के लिए वांटेड', ur: 'بدلے کے لیے وانٹڈ' },
+  'THE WANTED TARGET': { hi: 'द वांटेड टारगेट', ur: 'دی وانٹڈ ٹارگٹ' },
+  'DARK EVEDENCE': { hi: 'डार्क एविडेंस', ur: 'ڈارک ایویڈنس' },
+};
+
+const CATEGORIES = {
+  Thriller: { hi: 'थ्रिलर', ur: 'تھرلر' },
+  Crime: { hi: 'क्राइम', ur: 'کرائم' },
+  Action: { hi: 'एक्शन', ur: 'ایکشن' },
+  Mystery: { hi: 'मिस्ट्री', ur: 'مسٹری' },
+  Drama: { hi: 'ड्रामा', ur: 'ڈراما' },
+  Adventure: { hi: 'एडवेंचर', ur: 'ایڈونچر' },
+  Espionage: { hi: 'जासूसी', ur: 'جاسوسی' },
+  'Sci-Fi': { hi: 'साइ-फाई', ur: 'سائنس فکشن' },
+  Tech: { hi: 'टेक', ur: 'ٹیک' },
+  Film: { hi: 'फ़िल्म', ur: 'فلم' },
+  SERIES: { hi: 'सीरीज़', ur: 'سیریز' },
+  FILM: { hi: 'फ़िल्म', ur: 'فلم' },
+};
+
+export function videoTitle(lang, title) {
+  if (!title) return '';
+  if (!lang || lang === 'en') return title;
+  const entry = TITLES[title];
+  return entry?.[lang] || title;
+}
+
+export function videoCategory(lang, category) {
+  if (!category) return '';
+  if (!lang || lang === 'en') return category;
+  return String(category)
+    .split(/\s*[•·|,/]\s*/)
+    .map((part) => {
+      const key = part.trim();
+      return CATEGORIES[key]?.[lang] || key;
+    })
+    .join(lang === 'ur' ? ' • ' : ' • ');
+}
