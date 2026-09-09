@@ -13,11 +13,13 @@ const SLOW_IMAGE_HOSTS = [
 ];
 
 function isSlowImageHost(url) {
+  const raw = String(url || '').toLowerCase();
+  if (SLOW_IMAGE_HOSTS.some((h) => raw.includes(h))) return true;
   try {
     const host = new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
     return SLOW_IMAGE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -281,7 +283,7 @@ function ArticleOverlay({ item, onClose, tr }) {
               src={embedBlobUrl}
               title={item.title}
               referrerPolicy="no-referrer"
-              sandbox="allow-same-origin"
+              sandbox=""
             />
           </div>
         ) : (

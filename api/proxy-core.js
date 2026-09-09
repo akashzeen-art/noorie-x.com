@@ -12,55 +12,96 @@ function hostOf(url) {
 }
 
 function isSlowMediaHost(url) {
+  const raw = String(url || '').toLowerCase();
+  if (SLOW_MEDIA_HOSTS.some((h) => raw.includes(h))) return true;
   const host = hostOf(url);
-  if (!host) return true;
+  if (!host) return false;
   return SLOW_MEDIA_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
-function stripUnreliableMedia(html) {
-  let out = String(html || '');
-  // Drop entire img / picture / source / video poster tags that point at flaky hosts,
-  // and strip ALL imgs in embed preview to avoid browser connection timeouts.
-  out = out.replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, '');
-  out = out.replace(/<img\b[^>]*>/gi, '');
-  out = out.replace(/<source\b[^>]*>/gi, '');
-  out = out.replace(/\ssrcset=["'][^"']*["']/gi, '');
-  out = out.replace(/\sposter=["'][^"']*["']/gi, '');
-  // Neutralize inline background images from slow hosts
-  out = out.replace(/url\(\s*['"]?([^)'"]+)['"]?\s*\)/gi, (full, rawUrl) => {
-    return isSlowMediaHost(rawUrl) ? 'none' : full;
-  });
-  return out;
-}
-
+/** Build a quiet, text-only reader page — no scripts, images, or external assets. */
 function prepareHtmlForEmbed(html, pageUrl) {
-  const origin = new URL(pageUrl).origin;
-  let out = String(html || '');
-  out = out.replace(/<meta[^>]+http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
-  out = out.replace(/<meta[^>]+http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, '');
-  out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
-  out = out.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
-  out = out.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '');
-  out = out.replace(
-    /<link[^>]+(?:onesignal|outbrain|doubleclick|googlesyndication|googleadservices|googletagmanager|facebook|hotjar|taboola|adservice)[^>]*>/gi,
+  let raw = String(html || '');
+  raw = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+  raw = raw.replace(/<script\b[^>]*\/?>/gi, '');
+  raw = raw.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '');
+  raw = raw.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
+  raw = raw.replace(/<iframe\b[^>]*\/?>/gi, '');
+  raw = raw.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+  raw = raw.replace(/<link\b[^>]*>/gi, '');
+  raw = raw.replace(/<meta[^>]+http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
+
+  const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  let body = bodyMatch ? bodyMatch[1] : raw;
+
+  // Prefer common article containers when present
+  const articleMatch =
+    body.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i) ||
+    body.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
+  if (articleMatch) body = articleMatch[1];
+
+  body = body
+    .replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, '')
+    .replace(/<img\b[^>]*>/gi, '')
+    .replace(/<video\b[^>]*>[\s\S]*?<\/video>/gi, '')
+    .replace(/<audio\b[^>]*>[\s\S]*?<\/audio>/gi, '')
+    .replace(/<source\b[^>]*>/gi, '')
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '')
+    .replace(/<form\b[^>]*>[\s\S]*?<\/form>/gi, '')
+    .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header\b[^>]*>[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, '')
+    .replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\s(?:src|href|srcset|poster)\s*=\s*(['"])javascript:.*?\1/gi, '')
+    .replace(/url\(\s*['"]?[^)]+['"]?\s*\)/gi, 'none');
+
+  // Keep only safe content tags
+  body = body.replace(
+    /<\/?(?!p\b|br\b|h[1-6]\b|strong\b|b\b|em\b|i\b|u\b|ul\b|ol\b|li\b|blockquote\b|span\b|div\b|section\b|a\b|br\b)[a-z0-9:-]+\b[^>]*>/gi,
     '',
   );
-  out = stripUnreliableMedia(out);
-  // Block remaining subresource loads to flaky hosts via CSP
-  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: https: http:; media-src 'none'; style-src 'unsafe-inline' https: http: data:; font-src https: http: data:; connect-src 'none'; frame-src 'none'; script-src 'none'; base-uri ${origin}/;">`;
-  const baseTag = `<base href="${origin}/">`;
-  if (/<base\s/i.test(out)) {
-    out = out.replace(/<base[^>]*>/i, baseTag);
-  } else if (/<head[^>]*>/i.test(out)) {
-    out = out.replace(/<head[^>]*>/i, (m) => `${m}${baseTag}${csp}`);
-  } else {
-    out = `${baseTag}${csp}${out}`;
-  }
-  return out;
+  // Neutralize links so they don't navigate the iframe oddly
+  body = body.replace(/<a\b[^>]*>/gi, '<span>').replace(/<\/a>/gi, '</span>');
+
+  const titleMatch = String(html || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = titleMatch
+    ? titleMatch[1].replace(/<[^>]+>/g, '').trim().slice(0, 140)
+    : 'Article';
+  const safeTitle = title.replace(/[<>&]/g, '');
+  const source = (() => {
+    try {
+      return new URL(pageUrl).hostname;
+    } catch {
+      return '';
+    }
+  })();
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>
+    html,body{margin:0;padding:0;background:#111;color:#eee}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.55;padding:1.25rem 1.35rem 2rem}
+    .meta{color:#888;font-size:.8rem;margin:0 0 1rem}
+    h1,h2,h3,h4{line-height:1.25;margin:1.1rem 0 .55rem}
+    p{margin:0 0 .85rem;color:#ddd}
+    ul,ol{padding-left:1.2rem}
+    blockquote{margin:0 0 1rem;padding-left:.85rem;border-left:3px solid #e50914;color:#bbb}
+  </style>
+</head>
+<body>
+  <p class="meta">${source ? `Preview · ${source}` : 'Preview'}</p>
+  <h1>${safeTitle}</h1>
+  <div class="content">${body}</div>
+</body>
+</html>`;
 }
 
 function embedErrorPage(pageUrl, status, detail) {
-  const safeUrl = String(pageUrl || '').replace(/[<>&"]/g, '');
   const safeDetail = String(detail || '').replace(/[<>&]/g, '');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unavailable</title>
 <style>
@@ -97,7 +138,6 @@ export async function proxyUpstream(feedUrl) {
     throw err;
   }
 
-  // Don't even try hosts that hang and then pull timed-out images
   if (isUnreliableArticleHost(feedUrl)) {
     return {
       status: 200,
@@ -143,12 +183,12 @@ export async function proxyUpstream(feedUrl) {
       };
     }
 
-    const buf = Buffer.from(await response.arrayBuffer());
+    // Never return binary assets for the article iframe
     return {
       status: 200,
-      contentType,
-      body: buf,
-      embedFailed: false,
+      contentType: 'text/html; charset=utf-8',
+      body: embedErrorPage(feedUrl, 415, 'Unsupported content type'),
+      embedFailed: true,
     };
   } catch (err) {
     const msg = err?.name === 'AbortError' ? 'Request timed out' : String(err?.message || err);
