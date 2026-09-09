@@ -3676,6 +3676,12 @@ body.title-detail-open .title-detail {
   line-height: 1.4;
 }
 
+.rss-embed-note--info {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .rss-article-hero {
   margin: 0 0 18px;
   border-radius: 10px;

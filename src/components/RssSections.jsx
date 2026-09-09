@@ -3,10 +3,11 @@ import { useApp } from '../context/AppContext.jsx';
 
 const FEED_URLS = [
   'https://rss.app/feeds/ty2GelKikkAx9ykE.xml',
+  'https://news.google.com/rss/search?q=Pakistani+entertainment+OR+Pakistani+drama&hl=en-PK&gl=PK&ceid=PK:en',
 ];
 const RSS_LIMIT = 24;
 
-/** Hosts that often hang/timeout from many networks — skip so the UI stays fast. */
+/** Hosts that often hang for hotlinked images — skip thumbs only. */
 const SLOW_IMAGE_HOSTS = [
   'pakobserver.net',
   'propakistani.pk',
@@ -44,9 +45,14 @@ function sanitizeArticleHtml(html) {
 
 function pickImage(itemEl, descriptionHtml) {
   const candidates = [];
-  const media = itemEl.querySelector('media\\:content, content');
-  const mediaUrl = media?.getAttribute('url');
-  if (mediaUrl) candidates.push(mediaUrl);
+  const mediaNodes = [
+    ...itemEl.getElementsByTagName('media:content'),
+    ...itemEl.getElementsByTagName('content'),
+  ];
+  for (const media of mediaNodes) {
+    const mediaUrl = media.getAttribute('url');
+    if (mediaUrl) candidates.push(mediaUrl);
+  }
   const enclosure = itemEl.querySelector('enclosure[type^="image"]');
   if (enclosure?.getAttribute('url')) candidates.push(enclosure.getAttribute('url'));
   const m = String(descriptionHtml || '').match(/<img[^>]+src=["']([^"']+)["']/i);
@@ -61,20 +67,30 @@ function pickImage(itemEl, descriptionHtml) {
 function parseRssXml(xml, limit) {
   const doc = new DOMParser().parseFromString(xml, 'text/xml');
   if (doc.querySelector('parsererror')) throw new Error('Invalid RSS XML');
-  const channelTitle = doc.querySelector('channel > title')?.textContent?.trim() || 'Entertainment News';
+  const channelTitle =
+    doc.querySelector('channel > title')?.textContent?.trim() ||
+    doc.querySelector('feed > title')?.textContent?.trim() ||
+    'Entertainment News';
   const nodes = Array.from(doc.querySelectorAll('item, entry')).slice(0, limit || RSS_LIMIT);
+  if (!nodes.length) throw new Error('Feed has no articles');
   const items = nodes.map((node) => {
     const title = node.querySelector('title')?.textContent?.trim() || 'Untitled';
+    const linkEls = Array.from(node.querySelectorAll('link'));
     const link =
-      node.querySelector('link')?.getAttribute('href') ||
-      node.querySelector('link')?.textContent?.trim() ||
+      linkEls.map((el) => el.getAttribute('href')).find(Boolean) ||
+      linkEls.map((el) => el.textContent?.trim()).find(Boolean) ||
+      '';
+    const encoded =
+      node.getElementsByTagName('content:encoded')[0]?.textContent ||
+      node.getElementsByTagName('encoded')[0]?.textContent ||
       '';
     const descriptionHtml =
-      node.querySelector('content\\:encoded, encoded')?.textContent ||
+      encoded ||
       node.querySelector('description, summary, content')?.textContent ||
       '';
     const creator =
-      node.querySelector('dc\\:creator, creator, author > name, author')?.textContent?.trim() ||
+      node.getElementsByTagName('dc:creator')[0]?.textContent?.trim() ||
+      node.querySelector('creator, author > name, author')?.textContent?.trim() ||
       channelTitle;
     const pubDate =
       node.querySelector('pubDate, published, updated')?.textContent?.trim() || '';
@@ -95,17 +111,23 @@ async function fetchRssXml(urls) {
   const list = Array.isArray(urls) ? urls : [urls];
   let lastError = new Error('Failed to load feed');
   for (const url of list) {
-    try {
-      const localProxy = `/api/rss?url=${encodeURIComponent(url)}`;
-      const res = await fetch(localProxy);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      if (!(text.includes('<item') || text.includes('<entry') || text.includes('<rss') || text.includes('<feed'))) {
-        throw new Error('Non-RSS response');
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const bust = attempt ? `&_=${Date.now()}` : '';
+        const localProxy = `/api/rss?url=${encodeURIComponent(url)}${bust}`;
+        const res = await fetch(localProxy, { cache: attempt ? 'no-store' : 'default' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        const looksRss =
+          text.includes('<item') ||
+          text.includes('<entry') ||
+          text.includes('<rss') ||
+          text.includes('<feed');
+        if (!looksRss) throw new Error('Non-RSS response');
+        return text;
+      } catch (err) {
+        lastError = err;
       }
-      return text;
-    } catch (err) {
-      lastError = err;
     }
   }
   throw lastError;
@@ -159,35 +181,13 @@ function ArticleOverlay({ item, onClose, tr }) {
   const body = item.contentHtml || '';
   const hasHtml = /<\/?[a-z][\s\S]*>/i.test(body);
 
-  useEffect(() => {
-    setShowIframe(false);
-    setIframeFailed(false);
-    setIframeLoading(false);
-    setHeroFailed(false);
-    setEmbedBlobUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return '';
-    });
-  }, [item?.link]);
-
-  useEffect(() => () => {
-    if (embedBlobUrl) URL.revokeObjectURL(embedBlobUrl);
-  }, [embedBlobUrl]);
-
-  const openOriginal = async () => {
+  const loadPreview = async () => {
     if (!item.link) return;
-    // Skip iframe entirely for hosts that hang and pull timed-out images
-    if (isSlowImageHost(item.link)) {
-      setIframeFailed(true);
-      setShowIframe(false);
-      return;
-    }
     setIframeLoading(true);
     setIframeFailed(false);
     try {
       const res = await fetch(`/api/fetch?url=${encodeURIComponent(item.link)}`);
       const failed = res.headers.get('X-Embed-Failed') === '1';
-      // Also detect error page body if header is missing
       const text = await res.text();
       const bodyFailed = /data-embed-error=["']1["']/.test(text);
       if (!res.ok || failed || bodyFailed) {
@@ -195,7 +195,6 @@ function ArticleOverlay({ item, onClose, tr }) {
         setShowIframe(false);
         return;
       }
-      // Use blob URL so we don't fetch the proxy again (and so we use stripped HTML)
       const blob = new Blob([text], { type: 'text/html; charset=utf-8' });
       const blobUrl = URL.createObjectURL(blob);
       setEmbedBlobUrl((prev) => {
@@ -211,8 +210,31 @@ function ArticleOverlay({ item, onClose, tr }) {
     }
   };
 
+  useEffect(() => {
+    setShowIframe(false);
+    setIframeFailed(false);
+    setIframeLoading(false);
+    setHeroFailed(false);
+    setEmbedBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return '';
+    });
+    // Auto-load full article preview (uses reader fallback server-side when blocked)
+    if (item?.link) {
+      loadPreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when article changes
+  }, [item?.link]);
+
+  useEffect(() => () => {
+    if (embedBlobUrl) URL.revokeObjectURL(embedBlobUrl);
+  }, [embedBlobUrl]);
+
   const summaryView = (
     <div className="rss-article-view">
+      {iframeLoading ? (
+        <p className="rss-embed-note rss-embed-note--info">Loading full article…</p>
+      ) : null}
       {iframeFailed ? (
         <p className="rss-embed-note">
           Preview unavailable from this publisher. Showing the feed summary — use Read on site for the full article.
@@ -239,20 +261,20 @@ function ArticleOverlay({ item, onClose, tr }) {
         <p className="rss-article-view-text">{item.excerpt || stripHtml(body)}</p>
       )}
       <div className="rss-article-actions">
-        {item.link && !iframeFailed ? (
-          <button type="button" className="rss-read-more" onClick={openOriginal} disabled={iframeLoading}>
-            {iframeLoading ? 'Loading…' : 'Open original'}
-          </button>
-        ) : null}
         {item.link && iframeFailed ? (
-          <a
-            className="rss-read-more"
-            href={item.link}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read on site
-          </a>
+          <>
+            <button type="button" className="rss-read-more" onClick={loadPreview} disabled={iframeLoading}>
+              {iframeLoading ? 'Loading…' : 'Try preview again'}
+            </button>
+            <a
+              className="rss-read-more"
+              href={item.link}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Read on site
+            </a>
+          </>
         ) : null}
         <button type="button" className="rss-read-more is-ghost" onClick={onClose}>
           ← Back
@@ -274,7 +296,6 @@ function ArticleOverlay({ item, onClose, tr }) {
                 className="rss-read-more"
                 onClick={() => {
                   setShowIframe(false);
-                  setIframeFailed(false);
                   setEmbedBlobUrl((prev) => {
                     if (prev) URL.revokeObjectURL(prev);
                     return '';
@@ -283,6 +304,16 @@ function ArticleOverlay({ item, onClose, tr }) {
               >
                 ← Back to summary
               </button>
+              {item.link ? (
+                <a
+                  className="rss-read-more is-ghost"
+                  href={item.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Read on site
+                </a>
+              ) : null}
               <span className="rss-iframe-title">{item.title}</span>
             </div>
             <iframe
@@ -360,6 +391,15 @@ export default function RssSections() {
               {tr('rssRetry')}
             </button>
           ) : null}
+        </p>
+      ) : null}
+
+      {!loading && !error && !featured ? (
+        <p className="rss-status error">
+          No articles in feed
+          <button type="button" className="rss-retry-btn" onClick={loadFeed}>
+            {tr('rssRetry')}
+          </button>
         </p>
       ) : null}
 
