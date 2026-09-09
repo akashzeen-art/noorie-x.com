@@ -3623,7 +3623,20 @@ body.title-detail-open .title-detail {
   min-height: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: #fff;
+  background: #0b0b0b;
+}
+
+.rss-iframe-loading {
+  flex: 1;
+  min-height: 12rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.95rem;
+  background: #0b0b0b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
 }
 
 .rss-article-close {

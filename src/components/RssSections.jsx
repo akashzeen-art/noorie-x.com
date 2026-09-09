@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 
-/** Primary live feed + local snapshot fallback (same rss.app feed). */
+/** JSON Feed 1.1 from rss.app + local snapshot fallback. */
 const FEED_URLS = [
-  'https://rss.app/feeds/ty2GelKikkAx9ykE.xml',
-  '/feeds/pakistani-entertainment.xml',
+  'https://rss.app/feeds/v1.1/ty2GelKikkAx9ykE.json',
+  '/feeds/pakistani-entertainment.json',
 ];
 const RSS_LIMIT = 24;
 
-/** These hosts often hang and spam the console with ERR_CONNECTION_TIMED_OUT. */
 const SLOW_IMAGE_HOSTS = [
   'pakobserver.net',
   'propakistani.pk',
@@ -40,7 +39,6 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-/** Keep feed HTML for iframe, but drop scripts, slow images, and unsafe handlers. */
 function sanitizeFeedHtml(html) {
   let out = String(html || '')
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -50,11 +48,9 @@ function sanitizeFeedHtml(html) {
     .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
     .replace(/\s(?:href|src)\s*=\s*(['"])javascript:.*?\1/gi, '');
 
-  // Never request images from hosts that hang the browser
   for (const host of SLOW_IMAGE_HOSTS) {
     const escaped = host.replace(/\./g, '\\.');
     out = out.replace(new RegExp(`<img\\b[^>]*${escaped}[^>]*>`, 'gi'), '');
-    out = out.replace(new RegExp(`https?:\\/\\/[^"'\\s>]*${escaped}[^"'\\s>]*`, 'gi'), '');
   }
   out = out.replace(/<img\b[^>]*>/gi, (tag) => {
     const src = (tag.match(/\bsrc=["']([^"']+)["']/i) || [])[1] || '';
@@ -63,94 +59,85 @@ function sanitizeFeedHtml(html) {
   return out;
 }
 
-function stripSlowImagesFromHtml(html) {
-  return sanitizeFeedHtml(html);
+function safeImage(url) {
+  if (!url || isSlowImageHost(url)) return '';
+  return url;
 }
 
-/** Remove timed-out image hosts from raw RSS XML before parse/render. */
-function scrubSlowMediaFromXml(xml) {
-  let out = String(xml || '');
-  for (const host of SLOW_IMAGE_HOSTS) {
-    const escaped = host.replace(/\./g, '\\.');
-    out = out.replace(new RegExp(`<img\\b[^>]*${escaped}[^>]*>`, 'gi'), '');
-    out = out.replace(new RegExp(`<media:content\\b[^>]*${escaped}[^>]*\\/?>`, 'gi'), '');
+function formatDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function parseJsonFeed(text, limit) {
+  const clean = String(text || '').replace(/^[\s\S]*?(\{)/, '$1');
+  let data;
+  try {
+    data = JSON.parse(clean);
+  } catch {
+    throw new Error('Invalid JSON feed');
   }
-  return out;
-}
+  const list = Array.isArray(data.items) ? data.items : [];
+  if (!list.length) throw new Error('Feed has no articles');
 
-function pickImage(itemEl, descriptionHtml) {
-  const candidates = [];
-  const mediaNodes = [
-    ...itemEl.getElementsByTagName('media:content'),
-    ...itemEl.getElementsByTagName('content'),
-  ];
-  for (const media of mediaNodes) {
-    const mediaUrl = media.getAttribute('url');
-    if (mediaUrl) candidates.push(mediaUrl);
-  }
-  const enclosure = itemEl.querySelector('enclosure[type^="image"]');
-  if (enclosure?.getAttribute('url')) candidates.push(enclosure.getAttribute('url'));
-  const m = String(descriptionHtml || '').match(/<img[^>]+src=["']([^"']+)["']/i);
-  if (m?.[1]) candidates.push(m[1]);
-  return candidates.find((url) => url && !isSlowImageHost(url)) || '';
-}
-
-function parseRssXml(xml, limit) {
-  const clean = scrubSlowMediaFromXml(
-    String(xml || '').replace(/^[\s\S]*?(<\?xml|<rss\b|<feed\b)/i, '$1'),
-  );
-  const doc = new DOMParser().parseFromString(clean, 'text/xml');
-  if (doc.querySelector('parsererror')) throw new Error('Invalid RSS XML');
-  const channelTitle =
-    doc.querySelector('channel > title')?.textContent?.trim() ||
-    doc.querySelector('feed > title')?.textContent?.trim() ||
-    'Pakistani Entertainment';
-  const nodes = Array.from(doc.querySelectorAll('item, entry')).slice(0, limit || RSS_LIMIT);
-  if (!nodes.length) throw new Error('Feed has no articles');
-  const items = nodes.map((node) => {
-    const title = node.querySelector('title')?.textContent?.trim() || 'Untitled';
-    const linkEls = Array.from(node.querySelectorAll('link'));
-    const link =
-      linkEls.map((el) => el.getAttribute('href')).find(Boolean) ||
-      linkEls.map((el) => el.textContent?.trim()).find(Boolean) ||
-      '';
-    const encoded =
-      node.getElementsByTagName('content:encoded')[0]?.textContent ||
-      node.getElementsByTagName('encoded')[0]?.textContent ||
-      '';
-    const descriptionHtml =
-      encoded ||
-      node.querySelector('description, summary, content')?.textContent ||
-      '';
-    const creator =
-      node.getElementsByTagName('dc:creator')[0]?.textContent?.trim() ||
-      node.querySelector('creator, author > name, author')?.textContent?.trim() ||
-      channelTitle;
-    const pubDate =
-      node.querySelector('pubDate, published, updated')?.textContent?.trim() || '';
-    const image = pickImage(node, descriptionHtml);
-    const contentHtml = sanitizeFeedHtml(descriptionHtml);
+  const items = list.slice(0, limit || RSS_LIMIT).map((raw) => {
+    const title = String(raw.title || 'Untitled').trim();
+    const link = String(raw.url || raw.external_url || '').trim();
+    const descriptionHtml = String(raw.content_html || raw.content_text || '');
+    const image = safeImage(
+      raw.image ||
+        raw.banner_image ||
+        raw.attachments?.[0]?.url ||
+        (descriptionHtml.match(/<img[^>]+src=["']([^"']+)["']/i) || [])[1] ||
+        '',
+    );
+    const source =
+      raw.authors?.[0]?.name ||
+      raw.author?.name ||
+      data.title ||
+      'Pakistani Entertainment';
+    const pubDate = raw.date_published || raw.date_modified || '';
     return {
       title,
       link,
-      excerpt: stripHtml(descriptionHtml).slice(0, 220),
-      contentHtml,
+      excerpt: stripHtml(raw.content_text || descriptionHtml).slice(0, 220),
+      contentHtml: sanitizeFeedHtml(descriptionHtml),
       image,
-      source: creator,
+      source,
       pubDate,
     };
   });
-  return { title: channelTitle, items };
+
+  return {
+    title: data.title || 'Pakistani Entertainment',
+    items,
+  };
 }
 
-/** Build a self-contained article page from the RSS item for the iframe. */
-function buildFeedItemHtml(item) {
+/** Stable article page: keep feed image + full body text together (no mid-load swap). */
+function buildArticleHtml(item, fullBodyHtml = '') {
   const title = escapeHtml(item.title || 'Article');
   const source = escapeHtml(item.source || '');
   const date = escapeHtml(formatDate(item.pubDate) || '');
-  const image = item.image && !isSlowImageHost(item.image) ? escapeHtml(item.image) : '';
-  const body = sanitizeFeedHtml(item.contentHtml || item.excerpt || '');
-  const hasImgInBody = /<img\b/i.test(body);
+  const image = item.image ? escapeHtml(item.image) : '';
+
+  let body = '';
+  if (fullBodyHtml) {
+    // Full publisher text is already a complete page — extract .content or body
+    const contentMatch = fullBodyHtml.match(/<div class="content">([\s\S]*?)<\/div>\s*<\/body>/i);
+    const articleMatch = fullBodyHtml.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
+    body = sanitizeFeedHtml(contentMatch?.[1] || articleMatch?.[1] || '');
+    // Drop duplicate title if reader page included h1
+    body = body.replace(new RegExp(`<h1[^>]*>\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</h1>`, 'i'), '');
+  }
+  if (!body) {
+    body = sanitizeFeedHtml(item.contentHtml || '') || `<p>${escapeHtml(item.excerpt || '')}</p>`;
+  }
+
+  // Prefer one hero image from feed; strip body images to avoid flash/dupes
+  body = body.replace(/<img\b[^>]*>/gi, '');
 
   return `<!doctype html>
 <html lang="en">
@@ -161,25 +148,26 @@ function buildFeedItemHtml(item) {
   <style>
     html,body{margin:0;padding:0;background:#0b0b0b;color:#f2f2f2}
     body{font-family:Georgia,"Times New Roman",serif;line-height:1.65;padding:1.25rem 1.35rem 2.5rem}
-    .meta{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#999;font-size:.8rem;margin:0 0 1rem;letter-spacing:.02em}
+    .meta{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#999;font-size:.8rem;margin:0 0 1rem}
     h1{font-size:clamp(1.35rem,3vw,1.85rem);line-height:1.25;margin:0 0 1rem;font-weight:700;color:#fff}
+    h2,h3,h4{line-height:1.3;margin:1.1rem 0 .55rem;color:#fff}
     .hero{margin:0 0 1.15rem;border-radius:10px;overflow:hidden;background:#1a1a1a}
-    .hero img,.content img{width:100%;height:auto;display:block;border-radius:10px}
+    .hero img{width:100%;height:auto;display:block}
     .content{font-size:1.05rem;color:#ddd}
-    .content div{margin:0 0 .85rem}
-    .content p{margin:0 0 .85rem}
+    .content p,.content div{margin:0 0 .85rem}
+    blockquote{margin:0 0 1rem;padding-left:.85rem;border-left:3px solid #e50914;color:#bbb}
   </style>
 </head>
 <body>
   <p class="meta">${date}${source ? ` · ${source}` : ''}</p>
   <h1>${title}</h1>
-  ${image && !hasImgInBody ? `<div class="hero"><img src="${image}" alt="" referrerpolicy="no-referrer" /></div>` : ''}
-  <div class="content">${body || `<p>${escapeHtml(item.excerpt || '')}</p>`}</div>
+  ${image ? `<div class="hero"><img src="${image}" alt="" referrerpolicy="no-referrer" /></div>` : ''}
+  <div class="content">${body}</div>
 </body>
 </html>`;
 }
 
-async function fetchRssXml(urls) {
+async function fetchFeedJson(urls) {
   const list = Array.isArray(urls) ? urls : [urls];
   let lastError = new Error('Failed to load feed');
   for (const url of list) {
@@ -192,12 +180,9 @@ async function fetchRssXml(urls) {
         const res = await fetch(requestUrl, { cache: attempt ? 'no-store' : 'default' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
-        const looksRss =
-          text.includes('<item') ||
-          text.includes('<entry') ||
-          text.includes('<rss') ||
-          text.includes('<feed');
-        if (!looksRss) throw new Error('Non-RSS response');
+        if (!text.includes('"items"') && !text.includes('jsonfeed')) {
+          throw new Error('Non-JSON feed response');
+        }
         return text;
       } catch (err) {
         lastError = err;
@@ -205,13 +190,6 @@ async function fetchRssXml(urls) {
     }
   }
   throw lastError;
-}
-
-function formatDate(value) {
-  if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function NewsCard({ item, featured, badge, onOpen }) {
@@ -249,54 +227,47 @@ function NewsCard({ item, featured, badge, onOpen }) {
 
 function ArticleOverlay({ item, onClose, tr }) {
   const [embedBlobUrl, setEmbedBlobUrl] = useState('');
-  const [loadingFull, setLoadingFull] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    const urls = [];
+    let blobUrl = '';
 
-    const setBlob = (html) => {
+    const showHtml = (html) => {
       const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-      const blobUrl = URL.createObjectURL(blob);
-      urls.push(blobUrl);
-      if (!cancelled) {
-        setEmbedBlobUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return blobUrl;
-        });
-      } else {
-        URL.revokeObjectURL(blobUrl);
-      }
+      const next = URL.createObjectURL(blob);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      blobUrl = next;
+      if (!cancelled) setEmbedBlobUrl(next);
     };
 
-    // Instant preview from RSS XML (short description)
-    setBlob(buildFeedItemHtml(item));
-
-    // Then load the full publisher article text into the same iframe
-    const loadFull = async () => {
-      if (!item.link) return;
-      setLoadingFull(true);
-      try {
-        const res = await fetch(`/api/fetch?url=${encodeURIComponent(item.link)}`);
-        const failed = res.headers.get('X-Embed-Failed') === '1';
-        const text = await res.text();
-        if (cancelled) return;
-        if (!res.ok || failed || /data-embed-error=["']1["']/.test(text)) return;
-        const cleaned = stripSlowImagesFromHtml(text);
-        // Prefer full article when it has real body content
-        if (cleaned && cleaned.length > 800) setBlob(cleaned);
-      } catch {
-        // keep RSS preview
-      } finally {
-        if (!cancelled) setLoadingFull(false);
+    const load = async () => {
+      setLoading(true);
+      setEmbedBlobUrl('');
+      let fullHtml = '';
+      if (item.link) {
+        try {
+          const res = await fetch(`/api/fetch?url=${encodeURIComponent(item.link)}`);
+          const failed = res.headers.get('X-Embed-Failed') === '1';
+          const text = await res.text();
+          if (res.ok && !failed && !/data-embed-error=["']1["']/.test(text) && text.length > 800) {
+            fullHtml = text;
+          }
+        } catch {
+          // fall back to feed content
+        }
       }
+      if (cancelled) return;
+      // One stable render: feed image + full text (or feed summary)
+      showHtml(buildArticleHtml(item, fullHtml));
+      setLoading(false);
     };
 
-    loadFull();
+    load();
 
     return () => {
       cancelled = true;
-      urls.forEach((u) => URL.revokeObjectURL(u));
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [item]);
 
@@ -309,11 +280,12 @@ function ArticleOverlay({ item, onClose, tr }) {
             <button type="button" className="rss-read-more" onClick={onClose}>
               ← Back
             </button>
-            <span className="rss-iframe-title">
-              {loadingFull ? 'Loading full article…' : item.title}
-            </span>
+            <span className="rss-iframe-title">{item.title}</span>
           </div>
-          {embedBlobUrl ? (
+          {loading ? (
+            <div className="rss-iframe-loading">Loading article…</div>
+          ) : null}
+          {!loading && embedBlobUrl ? (
             <iframe
               className="rss-iframe"
               src={embedBlobUrl}
@@ -340,8 +312,8 @@ export default function RssSections() {
     setLoading(true);
     setError('');
     try {
-      const xml = await fetchRssXml(FEED_URLS);
-      const parsed = parseRssXml(xml, RSS_LIMIT);
+      const json = await fetchFeedJson(FEED_URLS);
+      const parsed = parseJsonFeed(json, RSS_LIMIT);
       setFeedData(parsed);
     } catch (err) {
       setError(err?.message || 'Failed to load feed');

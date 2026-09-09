@@ -198,7 +198,24 @@ export function isUnreliableArticleHost(url) {
   return isSlowMediaHost(url);
 }
 
+function looksLikeJsonFeed(text, contentType) {
+  if (/application\/feed\+json|application\/json|text\/json/i.test(contentType || '')) {
+    try {
+      const data = JSON.parse(text);
+      return Array.isArray(data?.items) || /jsonfeed/i.test(String(data?.version || ''));
+    } catch {
+      return false;
+    }
+  }
+  const sample = String(text || '').trim().slice(0, 500);
+  return (
+    sample.startsWith('{') &&
+    (/jsonfeed/i.test(sample) || /"items"\s*:/.test(sample))
+  );
+}
+
 function looksLikeFeed(text, contentType) {
+  if (looksLikeJsonFeed(text, contentType)) return true;
   if (/rss|atom|xml/i.test(contentType || '')) return true;
   const sample = String(text || '').slice(0, 4000);
   return (
@@ -331,7 +348,8 @@ export async function proxyUpstream(feedUrl, opts = {}) {
     const response = await fetch(feedUrl, {
       headers: {
         ...FETCH_HEADERS,
-        Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8',
+        Accept:
+          'application/feed+json, application/json, application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8',
         Referer: `${target.origin}/`,
       },
       redirect: 'follow',
@@ -350,6 +368,23 @@ export async function proxyUpstream(feedUrl, opts = {}) {
     }
 
     const text = await response.text();
+
+    if (looksLikeJsonFeed(text, contentType)) {
+      if (!response.ok) {
+        return {
+          status: response.status,
+          contentType: 'text/plain; charset=utf-8',
+          body: text.slice(0, 500) || `Upstream HTTP ${response.status}`,
+          embedFailed: true,
+        };
+      }
+      return {
+        status: 200,
+        contentType: 'application/feed+json; charset=utf-8',
+        body: text,
+        embedFailed: false,
+      };
+    }
 
     if (looksLikeFeed(text, contentType) && !looksLikeHtml(text, contentType)) {
       if (!response.ok) {
