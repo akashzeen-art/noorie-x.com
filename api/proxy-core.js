@@ -130,7 +130,29 @@ export function isUnreliableArticleHost(url) {
   return isSlowMediaHost(url);
 }
 
-export async function proxyUpstream(feedUrl) {
+function looksLikeFeed(text, contentType) {
+  if (/rss|atom|xml/i.test(contentType || '')) return true;
+  const sample = String(text || '').slice(0, 4000);
+  return (
+    /<\?xml\b/i.test(sample) ||
+    /<(rss|feed|rdf:RDF)\b/i.test(sample) ||
+    /<(item|entry)\b/i.test(sample)
+  );
+}
+
+function looksLikeHtml(text, contentType) {
+  if (/text\/html|application\/xhtml\+xml/i.test(contentType || '')) return true;
+  return /<!doctype\s+html|<html[\s>]/i.test(String(text || '').slice(0, 2000));
+}
+
+/**
+ * @param {string} feedUrl
+ * @param {{ mode?: 'feed' | 'embed' }} [opts]
+ *   - feed: return RSS/Atom XML as-is (used by /api/rss)
+ *   - embed: strip publisher pages for in-app iframe (used by /api/fetch)
+ */
+export async function proxyUpstream(feedUrl, opts = {}) {
+  const mode = opts.mode === 'feed' ? 'feed' : 'embed';
   const target = new URL(feedUrl);
   if (!/^https?:$/i.test(target.protocol)) {
     const err = new Error('Only http/https URLs allowed');
@@ -138,7 +160,8 @@ export async function proxyUpstream(feedUrl) {
     throw err;
   }
 
-  if (isUnreliableArticleHost(feedUrl)) {
+  // Unreliable-host short-circuit only for article embeds, never for RSS feeds
+  if (mode === 'embed' && isUnreliableArticleHost(feedUrl)) {
     return {
       status: 200,
       contentType: 'text/html; charset=utf-8',
@@ -148,17 +171,71 @@ export async function proxyUpstream(feedUrl) {
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
+  const timer = setTimeout(() => controller.abort(), mode === 'feed' ? 20000 : 10000);
 
   try {
     const response = await fetch(feedUrl, {
       headers: {
         ...FETCH_HEADERS,
+        ...(mode === 'feed'
+          ? { Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8' }
+          : {}),
         Referer: `${target.origin}/`,
       },
       redirect: 'follow',
       signal: controller.signal,
     });
+
+    const contentType = response.headers.get('content-type') || 'text/plain; charset=utf-8';
+
+    if (/^(image|video|audio|font)\//i.test(contentType) || /octet-stream/i.test(contentType)) {
+      if (mode === 'feed') {
+        return {
+          status: 502,
+          contentType: 'text/plain; charset=utf-8',
+          body: `Upstream returned non-feed content (${contentType})`,
+          embedFailed: true,
+        };
+      }
+      return {
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: embedErrorPage(feedUrl, 415, 'Unsupported content type'),
+        embedFailed: true,
+      };
+    }
+
+    const text = await response.text();
+    const finalUrl = response.url || feedUrl;
+
+    // RSS / Atom — always pass through (feed mode, or accidental XML hit)
+    if (looksLikeFeed(text, contentType) && !looksLikeHtml(text, contentType)) {
+      if (!response.ok) {
+        return {
+          status: response.status,
+          contentType: 'text/plain; charset=utf-8',
+          body: text.slice(0, 500) || `Upstream HTTP ${response.status}`,
+          embedFailed: true,
+        };
+      }
+      return {
+        status: 200,
+        contentType: /xml|rss|atom/i.test(contentType)
+          ? contentType
+          : 'application/xml; charset=utf-8',
+        body: text,
+        embedFailed: false,
+      };
+    }
+
+    if (mode === 'feed') {
+      return {
+        status: response.ok ? 502 : response.status,
+        contentType: 'text/plain; charset=utf-8',
+        body: `Non-RSS upstream response (HTTP ${response.status})`,
+        embedFailed: true,
+      };
+    }
 
     if (!response.ok) {
       return {
@@ -169,12 +246,7 @@ export async function proxyUpstream(feedUrl) {
       };
     }
 
-    const contentType = response.headers.get('content-type') || 'text/plain; charset=utf-8';
-    const isHtml = /text\/html|application\/xhtml\+xml/i.test(contentType);
-    const finalUrl = response.url || feedUrl;
-
-    if (isHtml) {
-      const text = await response.text();
+    if (looksLikeHtml(text, contentType)) {
       return {
         status: 200,
         contentType: 'text/html; charset=utf-8',
@@ -183,7 +255,6 @@ export async function proxyUpstream(feedUrl) {
       };
     }
 
-    // Never return binary assets for the article iframe
     return {
       status: 200,
       contentType: 'text/html; charset=utf-8',
@@ -192,6 +263,14 @@ export async function proxyUpstream(feedUrl) {
     };
   } catch (err) {
     const msg = err?.name === 'AbortError' ? 'Request timed out' : String(err?.message || err);
+    if (mode === 'feed') {
+      return {
+        status: 502,
+        contentType: 'text/plain; charset=utf-8',
+        body: msg,
+        embedFailed: true,
+      };
+    }
     return {
       status: 200,
       contentType: 'text/html; charset=utf-8',

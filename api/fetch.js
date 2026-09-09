@@ -1,3 +1,3 @@
-import proxyHandler from './_proxy.js';
+import { createProxyHandler } from './_proxy.js';
 
-export default proxyHandler;
+export default createProxyHandler('embed');

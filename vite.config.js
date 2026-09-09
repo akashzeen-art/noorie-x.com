@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import { proxyUpstream } from './api/proxy-core.js'
 
 function rssProxyPlugin() {
-  const handler = async (req, res) => {
+  const makeHandler = (mode) => async (req, res) => {
     const reqUrl = new URL(req.url, 'http://localhost')
     const feedUrl = reqUrl.searchParams.get('url')
     if (!feedUrl) {
@@ -20,7 +20,7 @@ function rssProxyPlugin() {
       return
     }
 
-    const result = await proxyUpstream(feedUrl)
+    const result = await proxyUpstream(feedUrl, { mode })
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Expose-Headers', 'X-Embed-Failed')
     res.setHeader(
@@ -36,12 +36,12 @@ function rssProxyPlugin() {
   return {
     name: 'rss-proxy',
     configureServer(server) {
-      server.middlewares.use('/api/rss', handler)
-      server.middlewares.use('/api/fetch', handler)
+      server.middlewares.use('/api/rss', makeHandler('feed'))
+      server.middlewares.use('/api/fetch', makeHandler('embed'))
     },
     configurePreviewServer(server) {
-      server.middlewares.use('/api/rss', handler)
-      server.middlewares.use('/api/fetch', handler)
+      server.middlewares.use('/api/rss', makeHandler('feed'))
+      server.middlewares.use('/api/fetch', makeHandler('embed'))
     },
   }
 }
