@@ -1,33 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 
+/** Primary live feed + local snapshot fallback (same rss.app feed). */
 const FEED_URLS = [
   'https://rss.app/feeds/ty2GelKikkAx9ykE.xml',
-  'https://news.google.com/rss/search?q=Pakistani+entertainment+OR+Pakistani+drama&hl=en-PK&gl=PK&ceid=PK:en',
+  '/feeds/pakistani-entertainment.xml',
 ];
 const RSS_LIMIT = 24;
-
-/** Hosts that often hang for hotlinked images — skip thumbs only. */
-const SLOW_IMAGE_HOSTS = [
-  'pakobserver.net',
-  'propakistani.pk',
-];
-
-function isSlowImageHost(url) {
-  const raw = String(url || '').toLowerCase();
-  if (SLOW_IMAGE_HOSTS.some((h) => raw.includes(h))) return true;
-  try {
-    const host = new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
-    return SLOW_IMAGE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
-  } catch {
-    return false;
-  }
-}
-
-function safeImageUrl(url) {
-  if (!url) return '';
-  return isSlowImageHost(url) ? '' : url;
-}
 
 function stripHtml(html) {
   const tmp = document.createElement('div');
@@ -35,12 +14,23 @@ function stripHtml(html) {
   return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
 }
 
-/** Remove embedded images from feed HTML so they don't trigger timed-out requests. */
-function sanitizeArticleHtml(html) {
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Keep feed HTML for iframe, but drop scripts and unsafe handlers. */
+function sanitizeFeedHtml(html) {
   return String(html || '')
-    .replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, '')
-    .replace(/<img\b[^>]*>/gi, '')
-    .replace(/<source\b[^>]*>/gi, '');
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<script\b[^>]*\/?>/gi, '')
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<iframe\b[^>]*\/?>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\s(?:href|src)\s*=\s*(['"])javascript:.*?\1/gi, '');
 }
 
 function pickImage(itemEl, descriptionHtml) {
@@ -57,20 +47,17 @@ function pickImage(itemEl, descriptionHtml) {
   if (enclosure?.getAttribute('url')) candidates.push(enclosure.getAttribute('url'));
   const m = String(descriptionHtml || '').match(/<img[^>]+src=["']([^"']+)["']/i);
   if (m?.[1]) candidates.push(m[1]);
-  for (const url of candidates) {
-    const safe = safeImageUrl(url);
-    if (safe) return safe;
-  }
-  return '';
+  return candidates.find(Boolean) || '';
 }
 
 function parseRssXml(xml, limit) {
-  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  const clean = String(xml || '').replace(/^[\s\S]*?(<\?xml|<rss\b|<feed\b)/i, '$1');
+  const doc = new DOMParser().parseFromString(clean, 'text/xml');
   if (doc.querySelector('parsererror')) throw new Error('Invalid RSS XML');
   const channelTitle =
     doc.querySelector('channel > title')?.textContent?.trim() ||
     doc.querySelector('feed > title')?.textContent?.trim() ||
-    'Entertainment News';
+    'Pakistani Entertainment';
   const nodes = Array.from(doc.querySelectorAll('item, entry')).slice(0, limit || RSS_LIMIT);
   if (!nodes.length) throw new Error('Feed has no articles');
   const items = nodes.map((node) => {
@@ -94,17 +81,58 @@ function parseRssXml(xml, limit) {
       channelTitle;
     const pubDate =
       node.querySelector('pubDate, published, updated')?.textContent?.trim() || '';
+    const image = pickImage(node, descriptionHtml);
+    const contentHtml = sanitizeFeedHtml(descriptionHtml);
     return {
       title,
       link,
       excerpt: stripHtml(descriptionHtml).slice(0, 220),
-      contentHtml: sanitizeArticleHtml(descriptionHtml),
-      image: pickImage(node, descriptionHtml),
+      contentHtml,
+      image,
       source: creator,
       pubDate,
     };
   });
   return { title: channelTitle, items };
+}
+
+/** Build a self-contained article page from the RSS item for the iframe. */
+function buildFeedItemHtml(item) {
+  const title = escapeHtml(item.title || 'Article');
+  const source = escapeHtml(item.source || '');
+  const date = escapeHtml(formatDate(item.pubDate) || '');
+  const link = escapeHtml(item.link || '');
+  const image = item.image ? escapeHtml(item.image) : '';
+  const body = sanitizeFeedHtml(item.contentHtml || item.excerpt || '');
+  const hasImgInBody = /<img\b/i.test(body);
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    html,body{margin:0;padding:0;background:#0b0b0b;color:#f2f2f2}
+    body{font-family:Georgia,"Times New Roman",serif;line-height:1.65;padding:1.25rem 1.35rem 2.5rem}
+    .meta{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#999;font-size:.8rem;margin:0 0 1rem;letter-spacing:.02em}
+    h1{font-size:clamp(1.35rem,3vw,1.85rem);line-height:1.25;margin:0 0 1rem;font-weight:700;color:#fff}
+    .hero{margin:0 0 1.15rem;border-radius:10px;overflow:hidden;background:#1a1a1a}
+    .hero img,.content img{width:100%;height:auto;display:block;border-radius:10px}
+    .content{font-size:1.05rem;color:#ddd}
+    .content div{margin:0 0 .85rem}
+    .content p{margin:0 0 .85rem}
+    .source-link{display:inline-block;margin-top:1.5rem;padding:.65rem 1rem;border-radius:6px;background:#E50914;color:#fff;text-decoration:none;font-family:system-ui,sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+  </style>
+</head>
+<body>
+  <p class="meta">${date}${source ? ` · ${source}` : ''}</p>
+  <h1>${title}</h1>
+  ${image && !hasImgInBody ? `<div class="hero"><img src="${image}" alt="" referrerpolicy="no-referrer" /></div>` : ''}
+  <div class="content">${body || `<p>${escapeHtml(item.excerpt || '')}</p>`}</div>
+  ${link ? `<a class="source-link" href="${link}" target="_blank" rel="noopener noreferrer">Read on publisher site</a>` : ''}
+</body>
+</html>`;
 }
 
 async function fetchRssXml(urls) {
@@ -113,9 +141,11 @@ async function fetchRssXml(urls) {
   for (const url of list) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const bust = attempt ? `&_=${Date.now()}` : '';
-        const localProxy = `/api/rss?url=${encodeURIComponent(url)}${bust}`;
-        const res = await fetch(localProxy, { cache: attempt ? 'no-store' : 'default' });
+        const isLocal = url.startsWith('/');
+        const requestUrl = isLocal
+          ? `${url}${attempt ? `?_=${Date.now()}` : ''}`
+          : `/api/rss?url=${encodeURIComponent(url)}${attempt ? `&_=${Date.now()}` : ''}`;
+        const res = await fetch(requestUrl, { cache: attempt ? 'no-store' : 'default' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
         const looksRss =
@@ -173,160 +203,50 @@ function NewsCard({ item, featured, badge, onOpen }) {
 }
 
 function ArticleOverlay({ item, onClose, tr }) {
-  const [showIframe, setShowIframe] = useState(false);
-  const [iframeFailed, setIframeFailed] = useState(false);
-  const [iframeLoading, setIframeLoading] = useState(false);
-  const [heroFailed, setHeroFailed] = useState(false);
   const [embedBlobUrl, setEmbedBlobUrl] = useState('');
-  const body = item.contentHtml || '';
-  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(body);
-
-  const loadPreview = async () => {
-    if (!item.link) return;
-    setIframeLoading(true);
-    setIframeFailed(false);
-    try {
-      const res = await fetch(`/api/fetch?url=${encodeURIComponent(item.link)}`);
-      const failed = res.headers.get('X-Embed-Failed') === '1';
-      const text = await res.text();
-      const bodyFailed = /data-embed-error=["']1["']/.test(text);
-      if (!res.ok || failed || bodyFailed) {
-        setIframeFailed(true);
-        setShowIframe(false);
-        return;
-      }
-      const blob = new Blob([text], { type: 'text/html; charset=utf-8' });
-      const blobUrl = URL.createObjectURL(blob);
-      setEmbedBlobUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return blobUrl;
-      });
-      setShowIframe(true);
-    } catch {
-      setIframeFailed(true);
-      setShowIframe(false);
-    } finally {
-      setIframeLoading(false);
-    }
-  };
 
   useEffect(() => {
-    setShowIframe(false);
-    setIframeFailed(false);
-    setIframeLoading(false);
-    setHeroFailed(false);
+    const html = buildFeedItemHtml(item);
+    const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
     setEmbedBlobUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return '';
+      return blobUrl;
     });
-    // Auto-load full article preview (uses reader fallback server-side when blocked)
-    if (item?.link) {
-      loadPreview();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when article changes
-  }, [item?.link]);
-
-  useEffect(() => () => {
-    if (embedBlobUrl) URL.revokeObjectURL(embedBlobUrl);
-  }, [embedBlobUrl]);
-
-  const summaryView = (
-    <div className="rss-article-view">
-      {iframeLoading ? (
-        <p className="rss-embed-note rss-embed-note--info">Loading full article…</p>
-      ) : null}
-      {iframeFailed ? (
-        <p className="rss-embed-note">
-          Preview unavailable from this publisher. Showing the feed summary — use Read on site for the full article.
-        </p>
-      ) : null}
-      <p className="rss-post-meta">
-        {formatDate(item.pubDate)}
-        {item.source ? <span className="rss-post-author"> · {item.source}</span> : null}
-      </p>
-      <h3 className="rss-article-view-title">{item.title}</h3>
-      {item.image && !heroFailed ? (
-        <div className="rss-article-hero">
-          <img
-            src={item.image}
-            alt=""
-            referrerPolicy="no-referrer"
-            onError={() => setHeroFailed(true)}
-          />
-        </div>
-      ) : null}
-      {hasHtml ? (
-        <div className="rss-article-view-content" dangerouslySetInnerHTML={{ __html: body }} />
-      ) : (
-        <p className="rss-article-view-text">{item.excerpt || stripHtml(body)}</p>
-      )}
-      <div className="rss-article-actions">
-        {item.link && iframeFailed ? (
-          <>
-            <button type="button" className="rss-read-more" onClick={loadPreview} disabled={iframeLoading}>
-              {iframeLoading ? 'Loading…' : 'Try preview again'}
-            </button>
-            <a
-              className="rss-read-more"
-              href={item.link}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Read on site
-            </a>
-          </>
-        ) : null}
-        <button type="button" className="rss-read-more is-ghost" onClick={onClose}>
-          ← Back
-        </button>
-      </div>
-    </div>
-  );
+    return () => URL.revokeObjectURL(blobUrl);
+  }, [item]);
 
   return (
     <div className="rss-article-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={`rss-article-overlay-box${showIframe && !iframeFailed ? ' is-iframe' : ''}`}>
+      <div className="rss-article-overlay-box is-iframe">
         <button type="button" className="rss-article-close" onClick={onClose} aria-label={tr('close')}>&times;</button>
-
-        {showIframe && embedBlobUrl && !iframeFailed ? (
-          <div className="rss-iframe-wrap">
-            <div className="rss-iframe-toolbar">
-              <button
-                type="button"
-                className="rss-read-more"
-                onClick={() => {
-                  setShowIframe(false);
-                  setEmbedBlobUrl((prev) => {
-                    if (prev) URL.revokeObjectURL(prev);
-                    return '';
-                  });
-                }}
+        <div className="rss-iframe-wrap">
+          <div className="rss-iframe-toolbar">
+            <button type="button" className="rss-read-more" onClick={onClose}>
+              ← Back
+            </button>
+            {item.link ? (
+              <a
+                className="rss-read-more is-ghost"
+                href={item.link}
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                ← Back to summary
-              </button>
-              {item.link ? (
-                <a
-                  className="rss-read-more is-ghost"
-                  href={item.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Read on site
-                </a>
-              ) : null}
-              <span className="rss-iframe-title">{item.title}</span>
-            </div>
+                Open source
+              </a>
+            ) : null}
+            <span className="rss-iframe-title">{item.title}</span>
+          </div>
+          {embedBlobUrl ? (
             <iframe
               className="rss-iframe"
               src={embedBlobUrl}
               title={item.title}
               referrerPolicy="no-referrer"
-              sandbox=""
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
             />
-          </div>
-        ) : (
-          summaryView
-        )}
+          ) : null}
+        </div>
       </div>
     </div>
   );
