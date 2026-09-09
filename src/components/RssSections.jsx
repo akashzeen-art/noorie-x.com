@@ -116,28 +116,36 @@ function parseJsonFeed(text, limit) {
   };
 }
 
-/** Stable article page: keep feed image + full body text together (no mid-load swap). */
+/** Stable article page: feed hero image stays; full text loads under it (no swap flash). */
 function buildArticleHtml(item, fullBodyHtml = '') {
   const title = escapeHtml(item.title || 'Article');
   const source = escapeHtml(item.source || '');
   const date = escapeHtml(formatDate(item.pubDate) || '');
-  const image = item.image ? escapeHtml(item.image) : '';
+
+  // Always prefer the feed image so the article never opens "blank"
+  let image =
+    (item.image && !isSlowImageHost(item.image) ? item.image : '') ||
+    ((item.contentHtml || '').match(/<img[^>]+src=["']([^"']+)["']/i) || [])[1] ||
+    '';
+  if (image && isSlowImageHost(image)) image = '';
+  const imageEsc = image ? escapeHtml(image) : '';
 
   let body = '';
   if (fullBodyHtml) {
-    // Full publisher text is already a complete page — extract .content or body
-    const contentMatch = fullBodyHtml.match(/<div class="content">([\s\S]*?)<\/div>\s*<\/body>/i);
+    const contentMatch = fullBodyHtml.match(/<div class="content">([\s\S]*)<\/div>\s*<\/body>/i);
     const articleMatch = fullBodyHtml.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
     body = sanitizeFeedHtml(contentMatch?.[1] || articleMatch?.[1] || '');
-    // Drop duplicate title if reader page included h1
-    body = body.replace(new RegExp(`<h1[^>]*>\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</h1>`, 'i'), '');
+    body = body.replace(
+      new RegExp(`<h1[^>]*>\\s*${title.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\s*<\\/h1>`, 'i'),
+      '',
+    );
   }
   if (!body) {
+    // Feed HTML already includes the image — keep it when no full article
     body = sanitizeFeedHtml(item.contentHtml || '') || `<p>${escapeHtml(item.excerpt || '')}</p>`;
   }
 
-  // Prefer one hero image from feed; strip body images to avoid flash/dupes
-  body = body.replace(/<img\b[^>]*>/gi, '');
+  const bodyHasImage = /<img\b/i.test(body);
 
   return `<!doctype html>
 <html lang="en">
@@ -152,7 +160,7 @@ function buildArticleHtml(item, fullBodyHtml = '') {
     h1{font-size:clamp(1.35rem,3vw,1.85rem);line-height:1.25;margin:0 0 1rem;font-weight:700;color:#fff}
     h2,h3,h4{line-height:1.3;margin:1.1rem 0 .55rem;color:#fff}
     .hero{margin:0 0 1.15rem;border-radius:10px;overflow:hidden;background:#1a1a1a}
-    .hero img{width:100%;height:auto;display:block}
+    .hero img,.content img{width:100%;height:auto;display:block;border-radius:10px}
     .content{font-size:1.05rem;color:#ddd}
     .content p,.content div{margin:0 0 .85rem}
     blockquote{margin:0 0 1rem;padding-left:.85rem;border-left:3px solid #e50914;color:#bbb}
@@ -161,7 +169,7 @@ function buildArticleHtml(item, fullBodyHtml = '') {
 <body>
   <p class="meta">${date}${source ? ` · ${source}` : ''}</p>
   <h1>${title}</h1>
-  ${image ? `<div class="hero"><img src="${image}" alt="" referrerpolicy="no-referrer" /></div>` : ''}
+  ${imageEsc && !bodyHasImage ? `<div class="hero"><img src="${imageEsc}" alt="" referrerpolicy="no-referrer" /></div>` : ''}
   <div class="content">${body}</div>
 </body>
 </html>`;
