@@ -215,7 +215,7 @@ function ArticleOverlay({ item, onClose, tr }) {
     <div className="rss-article-view">
       {iframeFailed ? (
         <p className="rss-embed-note">
-          Original site blocked or timed out the preview. Showing the feed summary instead.
+          Preview unavailable from this publisher. Showing the feed summary — use Read on site for the full article.
         </p>
       ) : null}
       <p className="rss-post-meta">
@@ -238,19 +238,26 @@ function ArticleOverlay({ item, onClose, tr }) {
       ) : (
         <p className="rss-article-view-text">{item.excerpt || stripHtml(body)}</p>
       )}
-      {item.link && !iframeFailed ? (
-        <button type="button" className="rss-read-more" onClick={openOriginal} disabled={iframeLoading}>
-          {iframeLoading ? 'Loading…' : 'Open original'}
+      <div className="rss-article-actions">
+        {item.link && !iframeFailed ? (
+          <button type="button" className="rss-read-more" onClick={openOriginal} disabled={iframeLoading}>
+            {iframeLoading ? 'Loading…' : 'Open original'}
+          </button>
+        ) : null}
+        {item.link && iframeFailed ? (
+          <a
+            className="rss-read-more"
+            href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Read on site
+          </a>
+        ) : null}
+        <button type="button" className="rss-read-more is-ghost" onClick={onClose}>
+          ← Back
         </button>
-      ) : null}
-      <button
-        type="button"
-        className="rss-read-more"
-        style={{ marginLeft: item.link && !iframeFailed ? 10 : 0 }}
-        onClick={onClose}
-      >
-        ← Back
-      </button>
+      </div>
     </div>
   );
 

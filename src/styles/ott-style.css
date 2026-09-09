@@ -3723,3 +3723,17 @@ body.title-detail-open .title-detail {
 }
 
 .rss-read-more:hover { filter: brightness(1.08); }
+
+.rss-read-more.is-ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rss-article-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
