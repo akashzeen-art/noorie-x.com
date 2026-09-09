@@ -1,6 +1,5 @@
 export const LANG_OPTIONS = [
   { id: 'en', label: 'English', native: 'English' },
-  { id: 'hi', label: 'Hindi', native: 'हिन्दी' },
   { id: 'ur', label: 'Urdu', native: 'اردو' },
 ];
 

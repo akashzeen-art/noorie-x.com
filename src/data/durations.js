@@ -61,7 +61,6 @@ export const CHALCHITRA_DURATIONS = {
   "v68": 784,
   "v66": 631,
   "v69": 1769,
-  "v71": 914,
   "v70": 1439,
   "v72": 734,
   "v73": 1178,

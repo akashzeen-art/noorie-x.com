@@ -38,7 +38,6 @@ export const CAROUSEL_3D_IMAGES = [
   '/img/newlandscape/LAST MISSION ALIVE.jpg',
   '/img/newlandscape/MYSTERY JUNCTION.jpg',
   '/img/newlandscape/THE SHADOW GAME EP3.jpg',
-  '/img/newlandscape/ROGUE NATION.jpg',
 ];
 
 export const PLANS = [

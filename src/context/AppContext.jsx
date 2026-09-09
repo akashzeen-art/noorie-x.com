@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { CHALCHITRA } from '../data/content.js';
 import { PLANS } from '../data/heroData.js';
 import {
@@ -28,8 +28,9 @@ import {
 } from '../utils/phone.js';
 import { titleDetailMeta, getVideoById, loadCachedDuration, saveCachedDuration, formatDurationMins } from '../utils/video.js';
 import { t, isRtl } from '../i18n/translations.js';
+import { AppContext } from './app-context.js';
 
-const AppContext = createContext(null);
+export { useApp } from './app-context.js';
 
 export function AppProvider({ children }) {
   const [ready, setReady] = useState(false);
@@ -52,21 +53,21 @@ export function AppProvider({ children }) {
   const [lang, setLangState] = useState(() => {
     try {
       const saved = localStorage.getItem(LANG_KEY);
-      if (saved === 'en' || saved === 'hi' || saved === 'ur') return saved;
+      if (saved === 'ur') return 'ur';
     } catch { /* ignore */ }
     return 'en';
   });
 
   const setLang = useCallback((next) => {
-    const value = next === 'hi' || next === 'ur' ? next : 'en';
+    const value = next === 'ur' ? 'ur' : 'en';
     setLangState(value);
     try { localStorage.setItem(LANG_KEY, value); } catch { /* ignore */ }
-    document.documentElement.lang = value === 'hi' ? 'hi' : value === 'ur' ? 'ur' : 'en';
+    document.documentElement.lang = value === 'ur' ? 'ur' : 'en';
     document.documentElement.dir = isRtl(value) ? 'rtl' : 'ltr';
   }, []);
 
   useEffect(() => {
-    document.documentElement.lang = lang === 'hi' ? 'hi' : lang === 'ur' ? 'ur' : 'en';
+    document.documentElement.lang = lang === 'ur' ? 'ur' : 'en';
     document.documentElement.dir = isRtl(lang) ? 'rtl' : 'ltr';
   }, [lang]);
 
@@ -319,10 +320,4 @@ export function AppProvider({ children }) {
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-}
-
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
-  return ctx;
 }

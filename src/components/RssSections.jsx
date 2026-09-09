@@ -1,8 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 
-const FEED_URL = 'https://rss.app/feeds/ty2GelKikkAx9ykE.xml';
+const FEED_URLS = [
+  'https://rss.app/feeds/ty2GelKikkAx9ykE.xml',
+];
 const RSS_LIMIT = 24;
+
+/** Hosts that often hang/timeout from many networks — skip so the UI stays fast. */
+const SLOW_IMAGE_HOSTS = [
+  'pakobserver.net',
+  'propakistani.pk',
+];
+
+function isSlowImageHost(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+    return SLOW_IMAGE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  } catch {
+    return true;
+  }
+}
+
+function safeImageUrl(url) {
+  if (!url) return '';
+  return isSlowImageHost(url) ? '' : url;
+}
 
 function stripHtml(html) {
   const tmp = document.createElement('div');
@@ -10,14 +32,28 @@ function stripHtml(html) {
   return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
 }
 
+/** Remove embedded images from feed HTML so they don't trigger timed-out requests. */
+function sanitizeArticleHtml(html) {
+  return String(html || '')
+    .replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, '')
+    .replace(/<img\b[^>]*>/gi, '')
+    .replace(/<source\b[^>]*>/gi, '');
+}
+
 function pickImage(itemEl, descriptionHtml) {
+  const candidates = [];
   const media = itemEl.querySelector('media\\:content, content');
   const mediaUrl = media?.getAttribute('url');
-  if (mediaUrl) return mediaUrl;
+  if (mediaUrl) candidates.push(mediaUrl);
   const enclosure = itemEl.querySelector('enclosure[type^="image"]');
-  if (enclosure?.getAttribute('url')) return enclosure.getAttribute('url');
+  if (enclosure?.getAttribute('url')) candidates.push(enclosure.getAttribute('url'));
   const m = String(descriptionHtml || '').match(/<img[^>]+src=["']([^"']+)["']/i);
-  return m ? m[1] : '';
+  if (m?.[1]) candidates.push(m[1]);
+  for (const url of candidates) {
+    const safe = safeImageUrl(url);
+    if (safe) return safe;
+  }
+  return '';
 }
 
 function parseRssXml(xml, limit) {
@@ -44,7 +80,7 @@ function parseRssXml(xml, limit) {
       title,
       link,
       excerpt: stripHtml(descriptionHtml).slice(0, 220),
-      contentHtml: descriptionHtml,
+      contentHtml: sanitizeArticleHtml(descriptionHtml),
       image: pickImage(node, descriptionHtml),
       source: creator,
       pubDate,
@@ -53,15 +89,24 @@ function parseRssXml(xml, limit) {
   return { title: channelTitle, items };
 }
 
-async function fetchRssXml(url) {
-  const localProxy = `/api/rss?url=${encodeURIComponent(url)}`;
-  const res = await fetch(localProxy);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  if (!(text.includes('<item') || text.includes('<entry') || text.includes('<rss') || text.includes('<feed'))) {
-    throw new Error('Non-RSS response');
+async function fetchRssXml(urls) {
+  const list = Array.isArray(urls) ? urls : [urls];
+  let lastError = new Error('Failed to load feed');
+  for (const url of list) {
+    try {
+      const localProxy = `/api/rss?url=${encodeURIComponent(url)}`;
+      const res = await fetch(localProxy);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      if (!(text.includes('<item') || text.includes('<entry') || text.includes('<rss') || text.includes('<feed'))) {
+        throw new Error('Non-RSS response');
+      }
+      return text;
+    } catch (err) {
+      lastError = err;
+    }
   }
-  return text;
+  throw lastError;
 }
 
 function formatDate(value) {
@@ -72,19 +117,21 @@ function formatDate(value) {
 }
 
 function NewsCard({ item, featured, badge, onOpen }) {
+  const [imgFailed, setImgFailed] = useState(false);
   return (
     <button
       type="button"
       className={`rss-news-card${featured ? ' is-featured' : ''}`}
       onClick={() => onOpen(item)}
     >
-      {item.image ? (
+      {item.image && !imgFailed ? (
         <img
           src={item.image}
           alt={item.title}
           className="rss-news-card-img"
           loading="lazy"
           referrerPolicy="no-referrer"
+          onError={() => setImgFailed(true)}
         />
       ) : (
         <div className="rss-news-card-fallback" />
@@ -103,66 +150,142 @@ function NewsCard({ item, featured, badge, onOpen }) {
 
 function ArticleOverlay({ item, onClose, tr }) {
   const [showIframe, setShowIframe] = useState(false);
+  const [iframeFailed, setIframeFailed] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(false);
+  const [heroFailed, setHeroFailed] = useState(false);
+  const [embedBlobUrl, setEmbedBlobUrl] = useState('');
   const body = item.contentHtml || '';
   const hasHtml = /<\/?[a-z][\s\S]*>/i.test(body);
-  // Same-origin proxy so sites with X-Frame-Options still load in the iframe
-  const embedSrc = item.link ? `/api/fetch?url=${encodeURIComponent(item.link)}` : '';
 
   useEffect(() => {
     setShowIframe(false);
+    setIframeFailed(false);
+    setIframeLoading(false);
+    setHeroFailed(false);
+    setEmbedBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return '';
+    });
   }, [item?.link]);
+
+  useEffect(() => () => {
+    if (embedBlobUrl) URL.revokeObjectURL(embedBlobUrl);
+  }, [embedBlobUrl]);
+
+  const openOriginal = async () => {
+    if (!item.link) return;
+    // Skip iframe entirely for hosts that hang and pull timed-out images
+    if (isSlowImageHost(item.link)) {
+      setIframeFailed(true);
+      setShowIframe(false);
+      return;
+    }
+    setIframeLoading(true);
+    setIframeFailed(false);
+    try {
+      const res = await fetch(`/api/fetch?url=${encodeURIComponent(item.link)}`);
+      const failed = res.headers.get('X-Embed-Failed') === '1';
+      // Also detect error page body if header is missing
+      const text = await res.text();
+      const bodyFailed = /data-embed-error=["']1["']/.test(text);
+      if (!res.ok || failed || bodyFailed) {
+        setIframeFailed(true);
+        setShowIframe(false);
+        return;
+      }
+      // Use blob URL so we don't fetch the proxy again (and so we use stripped HTML)
+      const blob = new Blob([text], { type: 'text/html; charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      setEmbedBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
+      setShowIframe(true);
+    } catch {
+      setIframeFailed(true);
+      setShowIframe(false);
+    } finally {
+      setIframeLoading(false);
+    }
+  };
+
+  const summaryView = (
+    <div className="rss-article-view">
+      {iframeFailed ? (
+        <p className="rss-embed-note">
+          Original site blocked or timed out the preview. Showing the feed summary instead.
+        </p>
+      ) : null}
+      <p className="rss-post-meta">
+        {formatDate(item.pubDate)}
+        {item.source ? <span className="rss-post-author"> · {item.source}</span> : null}
+      </p>
+      <h3 className="rss-article-view-title">{item.title}</h3>
+      {item.image && !heroFailed ? (
+        <div className="rss-article-hero">
+          <img
+            src={item.image}
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={() => setHeroFailed(true)}
+          />
+        </div>
+      ) : null}
+      {hasHtml ? (
+        <div className="rss-article-view-content" dangerouslySetInnerHTML={{ __html: body }} />
+      ) : (
+        <p className="rss-article-view-text">{item.excerpt || stripHtml(body)}</p>
+      )}
+      {item.link && !iframeFailed ? (
+        <button type="button" className="rss-read-more" onClick={openOriginal} disabled={iframeLoading}>
+          {iframeLoading ? 'Loading…' : 'Open original'}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="rss-read-more"
+        style={{ marginLeft: item.link && !iframeFailed ? 10 : 0 }}
+        onClick={onClose}
+      >
+        ← Back
+      </button>
+    </div>
+  );
 
   return (
     <div className="rss-article-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={`rss-article-overlay-box${showIframe ? ' is-iframe' : ''}`}>
+      <div className={`rss-article-overlay-box${showIframe && !iframeFailed ? ' is-iframe' : ''}`}>
         <button type="button" className="rss-article-close" onClick={onClose} aria-label={tr('close')}>&times;</button>
 
-        {showIframe && embedSrc ? (
+        {showIframe && embedBlobUrl && !iframeFailed ? (
           <div className="rss-iframe-wrap">
             <div className="rss-iframe-toolbar">
-              <button type="button" className="rss-read-more" onClick={() => setShowIframe(false)}>
+              <button
+                type="button"
+                className="rss-read-more"
+                onClick={() => {
+                  setShowIframe(false);
+                  setIframeFailed(false);
+                  setEmbedBlobUrl((prev) => {
+                    if (prev) URL.revokeObjectURL(prev);
+                    return '';
+                  });
+                }}
+              >
                 ← Back to summary
               </button>
               <span className="rss-iframe-title">{item.title}</span>
             </div>
             <iframe
               className="rss-iframe"
-              src={embedSrc}
+              src={embedBlobUrl}
               title={item.title}
               referrerPolicy="no-referrer"
+              sandbox="allow-same-origin"
             />
           </div>
         ) : (
-          <div className="rss-article-view">
-            <p className="rss-post-meta">
-              {formatDate(item.pubDate)}
-              {item.source ? <span className="rss-post-author"> · {item.source}</span> : null}
-            </p>
-            <h3 className="rss-article-view-title">{item.title}</h3>
-            {item.image ? (
-              <div className="rss-article-hero">
-                <img src={item.image} alt="" referrerPolicy="no-referrer" />
-              </div>
-            ) : null}
-            {hasHtml ? (
-              <div className="rss-article-view-content" dangerouslySetInnerHTML={{ __html: body }} />
-            ) : (
-              <p className="rss-article-view-text">{item.excerpt || stripHtml(body)}</p>
-            )}
-            {item.link ? (
-              <button type="button" className="rss-read-more" onClick={() => setShowIframe(true)}>
-                Open original
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="rss-read-more"
-              style={{ marginLeft: item.link ? 10 : 0 }}
-              onClick={onClose}
-            >
-              ← Back
-            </button>
-          </div>
+          summaryView
         )}
       </div>
     </div>
@@ -181,7 +304,7 @@ export default function RssSections() {
     setLoading(true);
     setError('');
     try {
-      const xml = await fetchRssXml(FEED_URL);
+      const xml = await fetchRssXml(FEED_URLS);
       const parsed = parseRssXml(xml, RSS_LIMIT);
       setFeedData(parsed);
     } catch (err) {

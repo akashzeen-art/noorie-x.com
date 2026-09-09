@@ -523,14 +523,6 @@ export const CHALCHITRA = {
   ],
   "rogueNationVideos": [
     {
-      "id": "v71",
-      "title": "ROGUE NATION",
-      "category": "Action",
-      "aspect": "landscape",
-      "thumb": "l71.png",
-      "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/914c52d0-5a98-43f5-992a-beaddefb5ab1/play_480p.mp4"
-    },
-    {
       "id": "v72",
       "title": "SILENT WITNESS",
       "category": "Thriller",
@@ -786,7 +778,6 @@ export const CHALCHITRA = {
     { "id": "v31", "title": "DANGEROUS MINDS EP4", "category": "Thriller", "aspect": "landscape", "thumb": "/img/newlandscape/DANGEROUS MINDS EP4.jpg", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/fb60c689-0ae6-4d37-9e7a-0a6fd490aef0/play_480p.mp4" },
     { "id": "v36", "title": "THE SECRET MISSION", "category": "Action", "aspect": "landscape", "thumb": "/img/newlandscape/THE SECRET MISSION.jpg", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/71121b34-eb1f-4a5d-984a-e1661e402d2d/play_480p.mp4" },
     { "id": "v35", "title": "THE DARK NETWORK", "category": "Crime", "aspect": "landscape", "thumb": "/img/newlandscape/THE DARK NETWORK.jpg", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/a9c3c48b-795d-400d-9483-40f612740a21/play_480p.mp4" },
-    { "id": "v71", "title": "ROGUE NATION", "category": "Action", "aspect": "landscape", "thumb": "/img/newlandscape/ROGUE NATION.jpg", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/914c52d0-5a98-43f5-992a-beaddefb5ab1/play_480p.mp4" },
     { "id": "v34", "title": "FINAL COUNTDOWN", "category": "Action", "aspect": "landscape", "thumb": "/img/newlandscape/FINAL COUNTDOWN.jpg", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/3514fd24-dc36-41f6-92ee-d0c151f16021/play_480p.mp4" },
     { "id": "v100", "title": "DARK EMPIRE", "category": "Crime", "aspect": "landscape", "thumb": "/img/newlandscape/DARK EMPIRE.jpg", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/2c0ea145-e0d1-44a9-8a3b-b3a40b01f11a/play_480p.mp4" },
     { "id": "v52", "title": "DARK CITY FILES", "category": "Crime", "aspect": "landscape", "thumb": "/img/newlandscape/DARK CITY FILES.jpg", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/64ef26c1-c28b-4cd4-926e-7f878f62e2c1/play_480p.mp4" },
@@ -885,8 +876,7 @@ export const CHALCHITRA = {
     { "id": "v39", "title": "WANTED FOR REVENGE", "category": "Action", "aspect": "landscape", "thumb": "l39.png", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/8a65b7aa-fa05-4a1e-9d25-3d34a0af19b5/play_480p.mp4" },
     { "id": "v44", "title": "DANGEROUS TERRITORY", "category": "Action", "aspect": "landscape", "thumb": "l44.png", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/89953c37-edf9-4b6d-85eb-eeb8251f4818/play_480p.mp4" },
     { "id": "v36", "title": "THE SECRET MISSION", "category": "Action", "aspect": "landscape", "thumb": "l36.png", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/71121b34-eb1f-4a5d-984a-e1661e402d2d/play_480p.mp4" },
-    { "id": "v35", "title": "THE DARK NETWORK", "category": "Crime", "aspect": "landscape", "thumb": "l35.png", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/a9c3c48b-795d-400d-9483-40f612740a21/play_480p.mp4" },
-    { "id": "v71", "title": "ROGUE NATION", "category": "Action", "aspect": "landscape", "thumb": "l71.png", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/914c52d0-5a98-43f5-992a-beaddefb5ab1/play_480p.mp4" }
+    { "id": "v35", "title": "THE DARK NETWORK", "category": "Crime", "aspect": "landscape", "thumb": "l35.png", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/a9c3c48b-795d-400d-9483-40f612740a21/play_480p.mp4" }
   ],
   "mindsVideos": [
     { "id": "v30", "title": "DANGEROUS MINDS EP3", "category": "Thriller", "aspect": "portrait", "thumb": "p30.png", "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/fd099482-0261-4b67-b760-f2cbcf8e06df/play_480p.mp4" },
@@ -1412,14 +1402,6 @@ export const CHALCHITRA = {
       "aspect": "portrait",
       "thumb": "p70.png",
       "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/f5c0b07d-5a7f-4df6-b906-1f7a2f0cef76/play_480p.mp4"
-    },
-    {
-      "id": "v71",
-      "title": "ROGUE NATION",
-      "category": "Action",
-      "aspect": "landscape",
-      "thumb": "l71.png",
-      "videoUrl": "https://vz-012bcd01-e4e.b-cdn.net/914c52d0-5a98-43f5-992a-beaddefb5ab1/play_480p.mp4"
     },
     {
       "id": "v72",

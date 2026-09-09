@@ -62,7 +62,6 @@ export const CHALCHITRA_THUMBS = {
   "v68": "KILLERINSTINCT.jpg",
   "v69": "ESCAPEROUT21.jpg",
   "v70": "BLACKSIGNAL.jpg",
-  "v71": "ROGUENATION.png",
   "v72": "SILENTWITNESS.png",
   "v73": "HIDDENFEAREP1.png",
   "v74": "HIDDENFEAREP2.png",

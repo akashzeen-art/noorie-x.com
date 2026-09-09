@@ -67,17 +67,6 @@ export default function Navbar({ onScrollTo }) {
         <Link to="/" className="navbar-brand">
           <img src="/img/logo/Noorie.png" alt="Noorie-X" />
         </Link>
-        <div className="navbar-links">
-          {[
-            ['top', tr('home')],
-            ['fatal', tr('tvShows')],
-            ['mission', tr('movies')],
-            ['dangerous', tr('newHot')],
-            ['escape', tr('myList')],
-          ].map(([id, label]) => (
-            <button key={id} type="button" onClick={() => onScrollTo(id)}>{label}</button>
-          ))}
-        </div>
         <div className="navbar-right">
           <div className={`nav-lang-wrap${langOpen ? ' open' : ''}`} ref={langWrapRef}>
             <button

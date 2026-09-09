@@ -9,6 +9,7 @@ export default function TitleDetailModal() {
     titleDetailMeta,
     subscriber,
     setPlayerVideo,
+    setExploreSection,
     openUnlockPlans,
     readIdSet,
     toggleIdInSet,
@@ -58,6 +59,7 @@ export default function TitleDetailModal() {
 
   const handlePlay = () => {
     setTitleDetailVideo(null);
+    setExploreSection(null);
     if (subscriber) {
       setPlayerVideo(titleDetailVideo);
     } else {

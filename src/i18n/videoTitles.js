@@ -49,7 +49,6 @@ const TITLES = {
   'MUCK ENGLISH WITH SU': { hi: 'मक इंग्लिश विद सू', ur: 'مک انگلش ود سو' },
   'MYSTERY JUNCTION': { hi: 'मिस्ट्री जंक्शन', ur: 'مسٹری جنکشن' },
   'OPERATION NIGHTFALL': { hi: 'ऑपरेशन नाइटफॉल', ur: 'آپریشن نائٹ فال' },
-  'ROGUE NATION': { hi: 'रोग नेशन', ur: 'روگ نیشن' },
   'Raaz Beyond Fear': { hi: 'राज़ बियॉन्ड फियर', ur: 'راز بئیونڈ فیئر' },
   'Raaz, Revenge & Mafia Ep1': { hi: 'राज़, रिवेंज और माफिया एप 1', ur: 'راز، ریوینج اور مافیا اقساط 1' },
   'Raaz, Revenge & Mafia Ep2': { hi: 'राज़, रिवेंज और माफिया एप 2', ur: 'راز، ریوینج اور مافیا اقساط 2' },
