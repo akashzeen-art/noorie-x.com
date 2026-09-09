@@ -8,6 +8,24 @@ const FEED_URLS = [
 ];
 const RSS_LIMIT = 24;
 
+/** These hosts often hang and spam the console with ERR_CONNECTION_TIMED_OUT. */
+const SLOW_IMAGE_HOSTS = [
+  'pakobserver.net',
+  'propakistani.pk',
+];
+
+function isSlowImageHost(url) {
+  const raw = String(url || '').toLowerCase();
+  if (!raw) return false;
+  if (SLOW_IMAGE_HOSTS.some((h) => raw.includes(h))) return true;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+    return SLOW_IMAGE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  } catch {
+    return false;
+  }
+}
+
 function stripHtml(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html || '';
@@ -22,15 +40,42 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-/** Keep feed HTML for iframe, but drop scripts and unsafe handlers. */
+/** Keep feed HTML for iframe, but drop scripts, slow images, and unsafe handlers. */
 function sanitizeFeedHtml(html) {
-  return String(html || '')
+  let out = String(html || '')
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<script\b[^>]*\/?>/gi, '')
     .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
     .replace(/<iframe\b[^>]*\/?>/gi, '')
     .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
     .replace(/\s(?:href|src)\s*=\s*(['"])javascript:.*?\1/gi, '');
+
+  // Never request images from hosts that hang the browser
+  for (const host of SLOW_IMAGE_HOSTS) {
+    const escaped = host.replace(/\./g, '\\.');
+    out = out.replace(new RegExp(`<img\\b[^>]*${escaped}[^>]*>`, 'gi'), '');
+    out = out.replace(new RegExp(`https?:\\/\\/[^"'\\s>]*${escaped}[^"'\\s>]*`, 'gi'), '');
+  }
+  out = out.replace(/<img\b[^>]*>/gi, (tag) => {
+    const src = (tag.match(/\bsrc=["']([^"']+)["']/i) || [])[1] || '';
+    return isSlowImageHost(src) ? '' : tag;
+  });
+  return out;
+}
+
+function stripSlowImagesFromHtml(html) {
+  return sanitizeFeedHtml(html);
+}
+
+/** Remove timed-out image hosts from raw RSS XML before parse/render. */
+function scrubSlowMediaFromXml(xml) {
+  let out = String(xml || '');
+  for (const host of SLOW_IMAGE_HOSTS) {
+    const escaped = host.replace(/\./g, '\\.');
+    out = out.replace(new RegExp(`<img\\b[^>]*${escaped}[^>]*>`, 'gi'), '');
+    out = out.replace(new RegExp(`<media:content\\b[^>]*${escaped}[^>]*\\/?>`, 'gi'), '');
+  }
+  return out;
 }
 
 function pickImage(itemEl, descriptionHtml) {
@@ -47,11 +92,13 @@ function pickImage(itemEl, descriptionHtml) {
   if (enclosure?.getAttribute('url')) candidates.push(enclosure.getAttribute('url'));
   const m = String(descriptionHtml || '').match(/<img[^>]+src=["']([^"']+)["']/i);
   if (m?.[1]) candidates.push(m[1]);
-  return candidates.find(Boolean) || '';
+  return candidates.find((url) => url && !isSlowImageHost(url)) || '';
 }
 
 function parseRssXml(xml, limit) {
-  const clean = String(xml || '').replace(/^[\s\S]*?(<\?xml|<rss\b|<feed\b)/i, '$1');
+  const clean = scrubSlowMediaFromXml(
+    String(xml || '').replace(/^[\s\S]*?(<\?xml|<rss\b|<feed\b)/i, '$1'),
+  );
   const doc = new DOMParser().parseFromString(clean, 'text/xml');
   if (doc.querySelector('parsererror')) throw new Error('Invalid RSS XML');
   const channelTitle =
@@ -101,8 +148,7 @@ function buildFeedItemHtml(item) {
   const title = escapeHtml(item.title || 'Article');
   const source = escapeHtml(item.source || '');
   const date = escapeHtml(formatDate(item.pubDate) || '');
-  const link = escapeHtml(item.link || '');
-  const image = item.image ? escapeHtml(item.image) : '';
+  const image = item.image && !isSlowImageHost(item.image) ? escapeHtml(item.image) : '';
   const body = sanitizeFeedHtml(item.contentHtml || item.excerpt || '');
   const hasImgInBody = /<img\b/i.test(body);
 
@@ -122,7 +168,6 @@ function buildFeedItemHtml(item) {
     .content{font-size:1.05rem;color:#ddd}
     .content div{margin:0 0 .85rem}
     .content p{margin:0 0 .85rem}
-    .source-link{display:inline-block;margin-top:1.5rem;padding:.65rem 1rem;border-radius:6px;background:#E50914;color:#fff;text-decoration:none;font-family:system-ui,sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
   </style>
 </head>
 <body>
@@ -130,7 +175,6 @@ function buildFeedItemHtml(item) {
   <h1>${title}</h1>
   ${image && !hasImgInBody ? `<div class="hero"><img src="${image}" alt="" referrerpolicy="no-referrer" /></div>` : ''}
   <div class="content">${body || `<p>${escapeHtml(item.excerpt || '')}</p>`}</div>
-  ${link ? `<a class="source-link" href="${link}" target="_blank" rel="noopener noreferrer">Read on publisher site</a>` : ''}
 </body>
 </html>`;
 }
@@ -172,15 +216,16 @@ function formatDate(value) {
 
 function NewsCard({ item, featured, badge, onOpen }) {
   const [imgFailed, setImgFailed] = useState(false);
+  const image = item.image && !isSlowImageHost(item.image) ? item.image : '';
   return (
     <button
       type="button"
       className={`rss-news-card${featured ? ' is-featured' : ''}`}
       onClick={() => onOpen(item)}
     >
-      {item.image && !imgFailed ? (
+      {image && !imgFailed ? (
         <img
-          src={item.image}
+          src={image}
           alt={item.title}
           className="rss-news-card-img"
           loading="lazy"
@@ -204,16 +249,55 @@ function NewsCard({ item, featured, badge, onOpen }) {
 
 function ArticleOverlay({ item, onClose, tr }) {
   const [embedBlobUrl, setEmbedBlobUrl] = useState('');
+  const [loadingFull, setLoadingFull] = useState(false);
 
   useEffect(() => {
-    const html = buildFeedItemHtml(item);
-    const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-    const blobUrl = URL.createObjectURL(blob);
-    setEmbedBlobUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return blobUrl;
-    });
-    return () => URL.revokeObjectURL(blobUrl);
+    let cancelled = false;
+    const urls = [];
+
+    const setBlob = (html) => {
+      const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      urls.push(blobUrl);
+      if (!cancelled) {
+        setEmbedBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return blobUrl;
+        });
+      } else {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+
+    // Instant preview from RSS XML (short description)
+    setBlob(buildFeedItemHtml(item));
+
+    // Then load the full publisher article text into the same iframe
+    const loadFull = async () => {
+      if (!item.link) return;
+      setLoadingFull(true);
+      try {
+        const res = await fetch(`/api/fetch?url=${encodeURIComponent(item.link)}`);
+        const failed = res.headers.get('X-Embed-Failed') === '1';
+        const text = await res.text();
+        if (cancelled) return;
+        if (!res.ok || failed || /data-embed-error=["']1["']/.test(text)) return;
+        const cleaned = stripSlowImagesFromHtml(text);
+        // Prefer full article when it has real body content
+        if (cleaned && cleaned.length > 800) setBlob(cleaned);
+      } catch {
+        // keep RSS preview
+      } finally {
+        if (!cancelled) setLoadingFull(false);
+      }
+    };
+
+    loadFull();
+
+    return () => {
+      cancelled = true;
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
   }, [item]);
 
   return (
@@ -225,17 +309,9 @@ function ArticleOverlay({ item, onClose, tr }) {
             <button type="button" className="rss-read-more" onClick={onClose}>
               ← Back
             </button>
-            {item.link ? (
-              <a
-                className="rss-read-more is-ghost"
-                href={item.link}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open source
-              </a>
-            ) : null}
-            <span className="rss-iframe-title">{item.title}</span>
+            <span className="rss-iframe-title">
+              {loadingFull ? 'Loading full article…' : item.title}
+            </span>
           </div>
           {embedBlobUrl ? (
             <iframe
@@ -243,7 +319,7 @@ function ArticleOverlay({ item, onClose, tr }) {
               src={embedBlobUrl}
               title={item.title}
               referrerPolicy="no-referrer"
-              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              sandbox=""
             />
           ) : null}
         </div>
