@@ -38,7 +38,7 @@ export default function UnlockModal() {
             <p className="modal-sub">{tr('unlockSub')}</p>
             <label className="form-label" htmlFor="unlock-phone">{tr('mobileNumber')}</label>
             <div className={`phone-field${phoneError ? ' is-invalid' : ''}`}>
-              <span className="phone-prefix">🇮🇳 +91</span>
+              <span className="phone-prefix">🇵🇰 +92</span>
               <input
                 className={`phone-input${phoneError ? ' is-invalid' : ''}${phoneInput.length === 10 ? ' valid' : ''}`}
                 id="unlock-phone"
